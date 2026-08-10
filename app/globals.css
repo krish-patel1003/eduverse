@@ -229,7 +229,12 @@ body {
   display: flex; flex-direction: column; gap: 10px;
 }
 .quiz-scroll { overflow-y: auto; display: flex; flex-direction: column; gap: 11px; min-height: 0; }
-.quiz-foot { flex-shrink: 0; }
+.quiz-foot { flex-shrink: 0; display: flex; align-items: center; gap: 10px; }
+.quiz-skip {
+  align-self: flex-start; padding: 10px 16px; border-radius: 9px; font-weight: 600; font-size: 14px;
+  background: transparent; border: 1px solid var(--border); color: var(--muted); cursor: pointer;
+}
+.quiz-skip:hover { color: var(--text); border-color: var(--accent); }
 .quiz-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .quiz-badge {
   font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
@@ -316,6 +321,22 @@ body {
 }
 .tick { position: absolute; top: 7px; width: 2px; height: 8px; background: var(--border); pointer-events: none; }
 .range { position: absolute; top: 5px; height: 12px; background: rgba(139, 124, 246, 0.35); border: 1px solid var(--violet); border-radius: 4px; pointer-events: none; }
+
+/* checkpoint markers on the timeline (click to jump to the question) */
+.q-marker {
+  position: absolute; top: 50%; transform: translate(-50%, -50%);
+  width: 16px; height: 16px; padding: 0; border: none; background: transparent;
+  cursor: pointer; z-index: 3; display: grid; place-items: center;
+}
+.q-marker-dot {
+  width: 11px; height: 11px; border-radius: 50%;
+  background: var(--accent); border: 2px solid var(--bg);
+  box-shadow: 0 0 0 1px var(--accent); transition: transform .12s;
+}
+.q-marker:hover .q-marker-dot { transform: scale(1.25); }
+.q-marker.done .q-marker-dot { background: var(--green); box-shadow: 0 0 0 1px var(--green); }
+.q-marker.skipped .q-marker-dot { background: var(--muted); box-shadow: 0 0 0 1px var(--muted); }
+.q-marker.active .q-marker-dot { background: #fff; box-shadow: 0 0 0 2px var(--accent); }
 
 .controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .controls button, .controls select {
