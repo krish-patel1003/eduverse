@@ -1,0 +1,14 @@
+/node_modules
+/.next
+/out
+.env
+.env.local
+/public/generated
+/public/uploads
+/data
+*.tsbuildinfo
+next-env.d.ts
+.DS_Store
+
+# local test fixtures (third-party sample docs)
+/test_source
