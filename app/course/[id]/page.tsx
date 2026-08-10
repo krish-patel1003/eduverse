@@ -207,7 +207,7 @@ export default function CoursePage({ params }: { params: Promise<{ id: string }>
         </aside>
 
         {/* ---- center: full-width player + tabbed panel ---- */}
-        <main className="course-main wide">
+        <main className="course-main">
           {isDraft && (
             <div className="draft-banner">
               This course outline is not approved yet.
@@ -215,6 +215,12 @@ export default function CoursePage({ params }: { params: Promise<{ id: string }>
             </div>
           )}
 
+          {/* Responsive: video + panel side-by-side on wide screens (fills the
+              side space); stacks with the panel below on narrow screens. When a
+              quiz or re-explanation takes over, the panel is hidden and the
+              stage spans full width. */}
+          <div className={`module-grid ${!ready || quizActive ? "solo" : ""}`}>
+            <div className="module-left">
           {selected && (
             <div className="module-head">
               <h1>{selected.title}</h1>
@@ -267,18 +273,22 @@ export default function CoursePage({ params }: { params: Promise<{ id: string }>
             </div>
           )}
           {error && <div className="err">{error}</div>}
+            </div>
 
-          {ready && !quizActive && (
-            <ModulePanel
-              key={selected!.id}
-              courseId={course.id}
-              moduleId={selected!.id}
-              playerRef={playerRef}
-              onStartQuiz={(qs) => setQuizActive(qs)}
-              onNewExplainer={(ex) => setOverride(ex)}
-              resultsKey={resultsKey}
-            />
-          )}
+            {ready && !quizActive && (
+              <div className="module-right">
+                <ModulePanel
+                  key={selected!.id}
+                  courseId={course.id}
+                  moduleId={selected!.id}
+                  playerRef={playerRef}
+                  onStartQuiz={(qs) => setQuizActive(qs)}
+                  onNewExplainer={(ex) => setOverride(ex)}
+                  resultsKey={resultsKey}
+                />
+              </div>
+            )}
+          </div>
         </main>
       </div>
     </div>

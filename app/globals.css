@@ -535,7 +535,6 @@ body {
 /* ---------- course workspace ---------- */
 .course-layout { display: grid; grid-template-columns: 280px 1fr 340px; flex: 1; min-height: 0; }
 .course-layout.two { grid-template-columns: 280px 1fr; }
-.course-main.wide { max-width: 1000px; width: 100%; margin: 0 auto; }
 .modules-rail { display: flex; flex-direction: column; background: #10131a; border-right: 1px solid var(--border); min-height: 0; }
 .mr-head { padding: 16px; border-bottom: 1px solid var(--border); }
 .mr-title { font-weight: 700; font-size: 15px; margin-bottom: 10px; line-height: 1.3; }
@@ -556,7 +555,16 @@ body {
 .mi-idx { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
 .mi-title { font-size: 14px; line-height: 1.3; }
 
-.course-main { display: flex; flex-direction: column; min-height: 0; overflow-y: auto; padding: 24px 28px; gap: 16px; }
+.course-main { display: flex; flex-direction: column; min-height: 0; overflow-y: auto; padding: 22px 28px; gap: 16px; }
+
+/* Responsive module workspace: stacked by default (panel below the video),
+   two columns on wide screens (panel fills the side space next to the video). */
+.module-grid { display: grid; grid-template-columns: 1fr; gap: 18px; align-items: start; min-width: 0; }
+.module-left { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.module-right { min-width: 0; }
+@media (min-width: 1180px) {
+  .module-grid:not(.solo) { grid-template-columns: minmax(0, 1fr) clamp(320px, 30%, 440px); }
+}
 .draft-banner { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 12px 16px; background: rgba(110,168,254,.1); border: 1px solid var(--accent); border-radius: 10px; font-size: 14px; }
 .module-head h1 { margin: 0 0 4px; font-size: 22px; letter-spacing: -0.01em; }
 .module-summary { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.5; }
@@ -565,7 +573,10 @@ body {
    and overlap the Mark-complete button below). Fill the column width so the
    video isn't boxed in with empty gutters on the sides. */
 .player-wrap { flex-shrink: 0; }
-.player-wrap .player { max-width: none; }
+/* Fill the column, but bound width by available height so the 16:9 stage can't
+   grow so tall it pushes the controls/tabs off screen. Ratio stays correct
+   (we cap width, not height); the player centers in its column. */
+.player-wrap .player { max-width: min(100%, calc(60vh * 16 / 9)); margin: 0 auto; }
 .render-card.standalone { margin: 0; }
 .locked-note { padding: 48px 24px; text-align: center; color: var(--muted); background: var(--panel); border: 1px dashed var(--border); border-radius: 14px; }
 .module-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
