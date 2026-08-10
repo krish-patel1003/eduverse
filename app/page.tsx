@@ -60,6 +60,21 @@ export default function Home() {
           </Link>
         </div>
 
+        {!loading && profile && profile.certificates.length > 0 && (
+          <section className="hub-section">
+            <h2>Your certificates</h2>
+            <div className="badge-row">
+              {profile.certificates.map((c) => (
+                <Link key={c.id} href={`/cert/${c.id}`} className="badge-card">
+                  <span className="badge-emoji">🎓</span>
+                  <span className="badge-title">{c.courseTitle}</span>
+                  <span className="badge-meta">{c.score}% · verified</span>
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
+
         {!loading && courses.length > 0 && (
           <section className="hub-section">
             <h2>Continue learning</h2>
@@ -73,6 +88,11 @@ export default function Home() {
                     <div className="cc-top">
                       <span className="cc-title">{c.title}</span>
                       <span className={`cc-badge ${c.status}`}>{c.status}</span>
+                    </div>
+                    <div className="cc-chips">
+                      <span className={`cc-mode ${c.mode}`}>
+                        {c.mode === "certification" ? "🎓 Certification" : "🧭 Self-eval"}
+                      </span>
                     </div>
                     <div className="cc-meta">
                       {d}/{total} modules · {pct(d, total)}%

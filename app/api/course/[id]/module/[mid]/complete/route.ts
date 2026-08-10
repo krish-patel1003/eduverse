@@ -15,6 +15,18 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: strin
       return NextResponse.json({ error: "Module not found" }, { status: 404 });
     }
 
+    // Certification mode gates completion behind the required quiz + assignment.
+    if (course.mode === "certification" && (!mod.quizPassed || !mod.assignmentPassed)) {
+      const missing = [
+        !mod.quizPassed ? "pass the module quiz" : null,
+        !mod.assignmentPassed ? "pass the assignment" : null,
+      ].filter(Boolean);
+      return NextResponse.json(
+        { error: `Finish the requirements first: ${missing.join(" and ")}.` },
+        { status: 403 }
+      );
+    }
+
     const updated = completeModuleUnlockNext(mid);
     // Finishing a module is weak positive evidence for its concepts.
     for (const obj of mod.objectives) upsertConcept(obj, 0.1);

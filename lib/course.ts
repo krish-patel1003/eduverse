@@ -7,6 +7,7 @@ import { callGemini, generateExplainer } from "./gemini";
 import { hintToPrompt } from "./profile";
 import { researchToPrompt } from "./research";
 import type {
+  AssignmentGrade,
   Course,
   CourseModule,
   Explainer,
@@ -142,7 +143,7 @@ function normStandaloneQuizzes(raw: unknown): Quiz[] {
       ? (raw as unknown[])
       : [];
   const out: Quiz[] = [];
-  arr.slice(0, 8).forEach((r, i) => {
+  arr.slice(0, 12).forEach((r, i) => {
     if (!r || typeof r !== "object") return;
     const q = r as Record<string, unknown>;
     if (typeof q.question !== "string" || !q.question.trim()) return;
@@ -235,4 +236,84 @@ export async function answerDoubt(input: { question: string; context: string; hi
   ])) as Record<string, unknown>;
   const answer = typeof raw.answer === "string" ? stripDashes(raw.answer.trim()).slice(0, 1200) : "";
   return answer || "I'm not sure how to answer that. Can you rephrase the question?";
+}
+
+// ---- Certification: grade an assignment submission -------------------------
+
+const GRADE_SPEC = `You are a fair but rigorous grader for a certification course. You are given the assignment tasks and the learner's typed answers. Evaluate each answer against its task. ${VOICE}
+
+Output ONLY this JSON:
+{
+  "perTask": [ { "ok": bool, "feedback": string } ],   // one entry per task, in order
+  "passed": bool,                                        // overall pass/fail
+  "score": number,                                       // 0..100
+  "overall": string                                      // one or two sentences of overall feedback
+}
+
+Rules:
+- Judge on correctness and completeness relative to the task, not length.
+- "ok" is true when the answer demonstrably satisfies the task.
+- Pass overall when at least 70 percent of tasks are ok AND no answer is blank or clearly wrong on a core idea.
+- Keep feedback specific and encouraging; say what was missing when "ok" is false.`;
+
+export async function gradeAssignment(input: {
+  tasks: string[];
+  answers: string[];
+  context: string;
+  hint?: LearnerHint;
+}): Promise<AssignmentGrade> {
+  const pairs = input.tasks
+    .map((t, i) => `Task ${i + 1}: ${t}\nAnswer ${i + 1}: ${input.answers[i]?.trim() || "(blank)"}`)
+    .join("\n\n");
+  const system = GRADE_SPEC + hintToPrompt(input.hint);
+  const raw = (await callGemini(system, [
+    { text: `Module material for reference:\n"""\n${input.context.slice(0, 5000)}\n"""\n\nGrade this submission:\n\n${pairs}` },
+  ])) as Record<string, unknown>;
+
+  const perTaskRaw = Array.isArray(raw.perTask) ? raw.perTask : [];
+  const perTask = input.tasks.map((_, i) => {
+    const p = (perTaskRaw[i] && typeof perTaskRaw[i] === "object" ? perTaskRaw[i] : {}) as Record<string, unknown>;
+    return {
+      ok: p.ok === true,
+      feedback: typeof p.feedback === "string" ? stripDashes(p.feedback.trim()).slice(0, 400) : "",
+    };
+  });
+  // Trust the model's verdict but guard against blanks: a blank answer is never ok.
+  input.answers.forEach((a, i) => {
+    if (!a || !a.trim()) perTask[i] = { ok: false, feedback: "No answer was provided for this task." };
+  });
+  const okCount = perTask.filter((p) => p.ok).length;
+  const derivedScore = Math.round((okCount / Math.max(1, perTask.length)) * 100);
+  const score = typeof raw.score === "number" && isFinite(raw.score) ? Math.max(0, Math.min(100, Math.round(raw.score))) : derivedScore;
+  const passed = perTask.every((p, i) => (input.answers[i]?.trim() ? true : false)) && (raw.passed === true || okCount / perTask.length >= 0.7);
+
+  return {
+    passed,
+    score,
+    perTask,
+    overall: typeof raw.overall === "string" ? stripDashes(raw.overall.trim()).slice(0, 600) : "",
+  };
+}
+
+// ---- Certification: final exam ---------------------------------------------
+
+export async function generateExam(input: {
+  courseTitle: string;
+  moduleNarrations: string[];
+  hint?: LearnerHint;
+}): Promise<Quiz[]> {
+  const material = input.moduleNarrations
+    .map((n, i) => `--- Module ${i + 1} ---\n${n}`)
+    .join("\n\n")
+    .slice(0, 14000);
+  const system =
+    `You are writing the FINAL CERTIFICATION EXAM for the course "${input.courseTitle}". Cover the WHOLE course, weighting the most important ideas across all modules. Make it more challenging than a module check: test synthesis and application, not just recall. ` +
+    QUIZ_SPEC.replace("3 to 5 questions", "8 to 12 questions") +
+    hintToPrompt(input.hint);
+  const raw = await callGemini(system, [
+    { text: `Write the certification exam. Course material across modules:\n\n"""\n${material}\n"""` },
+  ]);
+  const quizzes = normStandaloneQuizzes(raw);
+  if (quizzes.length === 0) throw new Error("Exam generation produced no questions");
+  return quizzes;
 }

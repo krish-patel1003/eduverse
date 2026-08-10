@@ -97,15 +97,35 @@ function migrate(db: Database.Database): void {
 
     CREATE INDEX IF NOT EXISTS idx_modules_course ON modules (course_id, idx);
     CREATE INDEX IF NOT EXISTS idx_events_student ON events (student_id, created_at);
+    CREATE TABLE IF NOT EXISTS certificates (
+      id           TEXT PRIMARY KEY,
+      student_id   TEXT NOT NULL,
+      course_id    TEXT NOT NULL,
+      course_title TEXT NOT NULL,
+      learner_name TEXT NOT NULL,
+      score        INTEGER NOT NULL DEFAULT 0,
+      issued_at    INTEGER NOT NULL
+    );
+
     CREATE INDEX IF NOT EXISTS idx_concepts_student ON concepts (student_id);
     CREATE INDEX IF NOT EXISTS idx_notes_module ON notes (module_id, t_ms);
+    CREATE INDEX IF NOT EXISTS idx_certs_student ON certificates (student_id);
   `);
 
-  // Additive migration: research brief cached on the course (older DBs lack it).
-  const courseCols = db.prepare(`PRAGMA table_info(courses)`).all() as { name: string }[];
-  if (!courseCols.some((c) => c.name === "research")) {
-    db.exec(`ALTER TABLE courses ADD COLUMN research TEXT`);
-  }
+  // Additive migrations for columns older DBs may lack. Each is idempotent.
+  const hasCol = (table: string, col: string) =>
+    (db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).some((c) => c.name === col);
+  const addCol = (table: string, col: string, ddl: string) => {
+    if (!hasCol(table, col)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
+  };
+  addCol("courses", "research", "research TEXT");
+  addCol("courses", "mode", "mode TEXT NOT NULL DEFAULT 'self_eval'");
+  addCol("students", "name", "name TEXT");
+  addCol("modules", "required_quiz", "required_quiz TEXT");
+  addCol("modules", "required_assignment", "required_assignment TEXT");
+  addCol("modules", "assignment_submission", "assignment_submission TEXT");
+  addCol("modules", "quiz_passed", "quiz_passed INTEGER NOT NULL DEFAULT 0");
+  addCol("modules", "assignment_passed", "assignment_passed INTEGER NOT NULL DEFAULT 0");
 
   // Ensure the single implicit student exists.
   db.prepare(

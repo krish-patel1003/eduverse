@@ -1,30 +1,51 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { Quiz } from "@/lib/types";
+import type { Certificate, Quiz } from "@/lib/types";
+
+/** practice = ungraded self-check; required = module gate; exam = final certification exam. */
+export type QuizKind = "practice" | "required" | "exam";
 
 interface Props {
   quizzes: Quiz[];
   courseId: string;
-  moduleId: string;
+  moduleId?: string;
+  kind?: QuizKind;
+  /** Learner name sent with an exam submission (for the certificate). */
+  learnerName?: string;
   /** Return to the module video. */
   onExit: () => void;
   /** Called after results are recorded, so the launcher can refresh past attempts. */
   onRecorded?: () => void;
+  /** Graded outcome (required/exam): whether it passed, and any issued certificate. */
+  onOutcome?: (o: { passed: boolean; score: number; certificate?: Certificate }) => void;
 }
 
 function sameSet(a: string[], b: string[]) {
   return a.length === b.length && a.every((x) => b.includes(x));
 }
 
+const PASS_PCT = 70;
+
 // Sequential quiz that takes over the player area: one question at a time, then
 // a results screen with per-concept analysis and a full review (every option
-// annotated with why it is right or wrong).
-export default function CourseQuiz({ quizzes, courseId, moduleId, onExit, onRecorded }: Props) {
+// annotated with why it is right or wrong). Used for practice self-checks, the
+// required per-module gate, and the final certification exam.
+export default function CourseQuiz({
+  quizzes,
+  courseId,
+  moduleId,
+  kind = "practice",
+  learnerName,
+  onExit,
+  onRecorded,
+  onOutcome,
+}: Props) {
   const [idx, setIdx] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string[]>>({});
   const [phase, setPhase] = useState<"quiz" | "results">("quiz");
   const [recorded, setRecorded] = useState(false);
+  const [certificate, setCertificate] = useState<Certificate | null>(null);
 
   const q = quizzes[idx];
   const chosen = answers[q?.id] ?? [];
@@ -63,18 +84,40 @@ export default function CourseQuiz({ quizzes, courseId, moduleId, onExit, onReco
     });
   }
 
+  const pct = Math.round((score / quizzes.length) * 100);
+  const passed = pct >= PASS_PCT;
+
   async function finish() {
     setPhase("results");
     if (recorded) return;
     setRecorded(true);
     const items = graded.map((g) => ({ concept: g.quiz.concept, isCorrect: g.correct }));
     try {
-      await fetch(`/api/course/${courseId}/module/${moduleId}/interact`, {
+      // Route the submission by kind: practice records to the profile; required
+      // grades the module gate; exam grades and may issue a certificate.
+      const url =
+        kind === "required"
+          ? `/api/course/${courseId}/module/${moduleId}/submit-quiz`
+          : kind === "exam"
+            ? `/api/course/${courseId}/exam`
+            : `/api/course/${courseId}/module/${moduleId}/interact`;
+      const body =
+        kind === "exam"
+          ? { items, name: learnerName }
+          : kind === "required"
+            ? { items }
+            : { type: "quiz-result", items };
+      const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "quiz-result", items }),
+        body: JSON.stringify(body),
       });
+      const data = await res.json().catch(() => ({}));
+      if (data?.certificate) setCertificate(data.certificate as Certificate);
       onRecorded?.();
+      if (kind !== "practice") {
+        onOutcome?.({ passed: data?.passed ?? passed, score: data?.score ?? pct, certificate: data?.certificate });
+      }
     } catch {
       /* best-effort */
     }
@@ -84,10 +127,36 @@ export default function CourseQuiz({ quizzes, courseId, moduleId, onExit, onReco
   if (phase === "results") {
     return (
       <div className="cq results">
+        {kind !== "practice" && (
+          <div className={`cq-verdict-banner ${passed ? "pass" : "fail"}`}>
+            <span className="cq-verdict-icon">{passed ? "✓" : "✗"}</span>
+            <div className="cq-verdict-text">
+              <b>
+                {passed
+                  ? kind === "exam"
+                    ? "You passed the certification exam!"
+                    : "Passed — this requirement is complete."
+                  : `Not passed yet — you need ${PASS_PCT}% or more.`}
+              </b>
+              <span>
+                {passed
+                  ? kind === "exam"
+                    ? "Your certificate has been issued."
+                    : "You can move on when you're ready."
+                  : "Review the answers below and try again."}
+              </span>
+            </div>
+            {kind === "exam" && passed && certificate && (
+              <a className="send big cq-cert-link" href={`/cert/${certificate.id}`}>
+                View your certificate ▸
+              </a>
+            )}
+          </div>
+        )}
         <div className="cq-results-head">
-          <div className="cq-score-ring" data-pct={Math.round((score / quizzes.length) * 100)}>
+          <div className="cq-score-ring" data-pct={pct}>
             <span className="cq-score-num">{score}/{quizzes.length}</span>
-            <span className="cq-score-lbl">{Math.round((score / quizzes.length) * 100)}%</span>
+            <span className="cq-score-lbl">{pct}%</span>
           </div>
           <div className="cq-analysis">
             <h3>How you did</h3>
@@ -144,7 +213,9 @@ export default function CourseQuiz({ quizzes, courseId, moduleId, onExit, onReco
         </div>
 
         <div className="cq-foot">
-          <button className="send big" onClick={onExit}>Back to the video ▸</button>
+          <button className="send big" onClick={onExit}>
+            {kind === "exam" ? "Done" : passed ? "Back to the video ▸" : "Back and try again ▸"}
+          </button>
         </div>
       </div>
     );

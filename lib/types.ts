@@ -255,6 +255,17 @@ export interface CourseModule {
   status: ModuleStatus;
   /** The generated explainer for this module (filled on first generate). */
   explainer?: Explainer;
+  // ---- certification mode: predefined required work ----
+  /** Predefined quiz the learner must pass to complete the module (cert mode). */
+  requiredQuiz?: Quiz[];
+  /** Predefined assignment tasks the learner must submit + pass (cert mode). */
+  requiredAssignment?: string[];
+  /** Learner's typed answers to the required assignment (parallel to the tasks). */
+  assignmentSubmission?: string[];
+  /** Passed the required quiz? (cert-mode completion gate) */
+  quizPassed: boolean;
+  /** Passed the required assignment? (cert-mode completion gate) */
+  assignmentPassed: boolean;
   createdAt: number;
   completedAt?: number;
 }
@@ -283,12 +294,22 @@ export interface CourseNote {
 
 export type CourseStatus = "draft" | "active" | "completed";
 
+/**
+ * How a course is run.
+ * - "self_eval": learner-controlled, no module locking, optional quizzes.
+ * - "certification": sequential unlock, required quiz + assignment per module,
+ *   a final exam, and a shareable certificate on passing.
+ */
+export type CourseMode = "self_eval" | "certification";
+
 export interface Course {
   id: string;
   studentId: string;
   title: string;
   topic: string;
   goals: string[];
+  /** Self-evaluation vs certification. */
+  mode: CourseMode;
   /** Extracted source text from attached docs, reused for every module. */
   docContext?: string;
   /** Web-grounded research brief, generated at outline time and reused per module. */
@@ -296,6 +317,32 @@ export interface Course {
   status: CourseStatus;
   modules: CourseModule[];
   createdAt: number;
+}
+
+/** A per-task grade for an AI-graded assignment submission. */
+export interface AssignmentTaskGrade {
+  ok: boolean;
+  feedback: string;
+}
+
+/** The result of grading an assignment submission. */
+export interface AssignmentGrade {
+  passed: boolean;
+  /** 0..100 overall. */
+  score: number;
+  perTask: AssignmentTaskGrade[];
+  overall: string;
+}
+
+/** An earned, shareable certificate for a completed certification course. */
+export interface Certificate {
+  id: string;
+  courseId: string;
+  courseTitle: string;
+  learnerName: string;
+  /** Exam score, 0..100. */
+  score: number;
+  issuedAt: number;
 }
 
 /** A take-home assignment produced on request. */
@@ -332,6 +379,8 @@ export interface CourseProgress {
 /** The aggregated student profile shown on the dashboard + fed to generation. */
 export interface StudentProfile {
   id: string;
+  /** Display name, used on certificates. */
+  name?: string;
   motivation?: string;
   goals: string[];
   learningStyle: LearningStyle;
@@ -340,4 +389,6 @@ export interface StudentProfile {
   practiceHistory: LearningEvent[];
   mistakes: LearningEvent[];
   progress: CourseProgress[];
+  /** Certificates earned from certification courses. */
+  certificates: Certificate[];
 }

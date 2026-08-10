@@ -37,6 +37,8 @@ const eventLabel: Record<string, string> = {
 export default function ProfilePage() {
   const [profile, setProfile] = useState<StudentProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [name, setName] = useState("");
+  const [savedName, setSavedName] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -44,11 +46,28 @@ export default function ProfilePage() {
         const res = await fetch("/api/profile");
         const data = await res.json();
         setProfile(data.profile ?? null);
+        setName(data.profile?.name ?? "");
       } finally {
         setLoading(false);
       }
     })();
   }, []);
+
+  async function saveName() {
+    try {
+      const res = await fetch("/api/profile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      const data = await res.json();
+      setProfile(data.profile ?? null);
+      setSavedName(true);
+      setTimeout(() => setSavedName(false), 1500);
+    } catch {
+      /* ignore */
+    }
+  }
 
   if (loading)
     return (
@@ -82,6 +101,43 @@ export default function ProfilePage() {
         </header>
 
         <div className="profile-grid">
+          {/* name (used on certificates) */}
+          <section className="pcard">
+            <h3>Your name</h3>
+            <p className="muted small-note">Used on the certificates you earn.</p>
+            <div className="name-row">
+              <input
+                className="name-input"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && saveName()}
+                placeholder="e.g. Alex Rivera"
+              />
+              <button className="ghost-btn" onClick={saveName}>{savedName ? "Saved ✓" : "Save"}</button>
+            </div>
+          </section>
+
+          {/* earned certificates */}
+          <section className="pcard">
+            <h3>Certificates <span className="count">{profile.certificates.length}</span></h3>
+            {profile.certificates.length ? (
+              <div className="cert-list">
+                {profile.certificates.map((c) => (
+                  <a key={c.id} href={`/cert/${c.id}`} className="cert-row">
+                    <span className="cert-row-badge">🎓</span>
+                    <span className="cert-row-body">
+                      <span className="cert-row-title">{c.courseTitle}</span>
+                      <span className="cert-row-meta">{c.score}% · {new Date(c.issuedAt).toLocaleDateString()}</span>
+                    </span>
+                    <span className="cert-row-view">View ▸</span>
+                  </a>
+                ))}
+              </div>
+            ) : (
+              <p className="muted">Finish a certification course to earn one.</p>
+            )}
+          </section>
+
           {/* goals + motivation */}
           <section className="pcard">
             <h3>Goals</h3>

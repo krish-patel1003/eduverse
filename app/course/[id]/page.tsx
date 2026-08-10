@@ -3,9 +3,10 @@
 import { use, useCallback, useEffect, useRef, useState } from "react";
 import ExplainerPlayer, { type PlayerHandle } from "@/components/ExplainerPlayer";
 import ModulePanel from "@/components/ModulePanel";
-import CourseQuiz from "@/components/CourseQuiz";
+import CourseQuiz, { type QuizKind } from "@/components/CourseQuiz";
 import AppNav from "@/components/AppNav";
-import type { Course, CourseModule, Explainer, Quiz } from "@/lib/types";
+import Link from "next/link";
+import type { Certificate, Course, CourseModule, Explainer, Quiz } from "@/lib/types";
 
 const statusIcon: Record<string, string> = {
   locked: "🔒",
@@ -26,8 +27,11 @@ export default function CoursePage({ params }: { params: Promise<{ id: string }>
   const [completing, setCompleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
-  const [quizActive, setQuizActive] = useState<Quiz[] | null>(null);
+  const [quizActive, setQuizActive] = useState<{ quizzes: Quiz[]; kind: QuizKind } | null>(null);
   const [resultsKey, setResultsKey] = useState(0);
+  const [examLoading, setExamLoading] = useState(false);
+  const [certificate, setCertificate] = useState<Certificate | null>(null);
+  const [learnerName, setLearnerName] = useState("");
   const genRef = useRef<Set<string>>(new Set());
   const playerRef = useRef<PlayerHandle>(null);
 
@@ -60,6 +64,18 @@ export default function CoursePage({ params }: { params: Promise<{ id: string }>
     load();
   }, [load]);
 
+  // Learner name (for the exam/certificate) + any certificate already earned.
+  useEffect(() => {
+    fetch("/api/profile")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.profile?.name) setLearnerName(d.profile.name);
+        const cert = (d.profile?.certificates ?? []).find((c: Certificate) => c.courseId === id);
+        if (cert) setCertificate(cert);
+      })
+      .catch(() => {});
+  }, [id]);
+
   const selected = course?.modules.find((m) => m.id === selectedId) ?? null;
   const displayExplainer = override ?? (selectedId ? explainers[selectedId] : undefined);
 
@@ -74,6 +90,9 @@ export default function CoursePage({ params }: { params: Promise<{ id: string }>
         const data = await res.json();
         if (!res.ok) throw new Error(data?.error ?? "Generation failed");
         setExplainers((prev) => ({ ...prev, [mod.id]: data.explainer }));
+        // Reload so certification required quiz/assignment (generated server-side)
+        // show up on the module.
+        load();
       } catch (err) {
         setError(err instanceof Error ? err.message : "Generation failed");
         genRef.current.delete(mod.id);
@@ -153,6 +172,25 @@ export default function CoursePage({ params }: { params: Promise<{ id: string }>
     [id, selected, reexBusy]
   );
 
+  // Certification exam: fetch fresh questions, then run them through CourseQuiz.
+  async function startExam() {
+    if (examLoading) return;
+    setExamLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/course/${id}/exam`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error ?? "Could not start exam");
+      if (!data.quizzes?.length) throw new Error("No exam questions came back.");
+      setOverride(null);
+      setQuizActive({ quizzes: data.quizzes as Quiz[], kind: "exam" });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not start exam");
+    } finally {
+      setExamLoading(false);
+    }
+  }
+
   if (notFound) {
     return (
       <div className="shell">
@@ -174,6 +212,11 @@ export default function CoursePage({ params }: { params: Promise<{ id: string }>
   const pct = course.modules.length ? Math.round((doneCount / course.modules.length) * 100) : 0;
   const isDraft = course.status === "draft";
   const ready = !!selected && !!displayExplainer && !isDraft;
+  const isCert = course.mode === "certification";
+  const allModulesDone = course.modules.length > 0 && course.modules.every((m) => m.status === "completed");
+  // In certification mode a module can only be completed once its required quiz
+  // and assignment are passed.
+  const canComplete = !isCert || (!!selected && selected.quizPassed && selected.assignmentPassed);
 
   return (
     <div className="shell">
@@ -215,6 +258,31 @@ export default function CoursePage({ params }: { params: Promise<{ id: string }>
             </div>
           )}
 
+          {/* Certification: earned-certificate banner, or the exam call-to-action
+              once every module is complete. */}
+          {isCert && certificate && !quizActive && (
+            <div className="cert-banner earned">
+              <span className="cb-badge">🎓</span>
+              <div className="cb-text">
+                <b>Certified! You passed this course.</b>
+                <span>Score {certificate.score}% · issued to {certificate.learnerName}</span>
+              </div>
+              <Link className="send" href={`/cert/${certificate.id}`}>View certificate ▸</Link>
+            </div>
+          )}
+          {isCert && allModulesDone && !certificate && !quizActive && (
+            <div className="cert-banner exam">
+              <span className="cb-badge">🎓</span>
+              <div className="cb-text">
+                <b>You've finished every module. Time for the certification exam.</b>
+                <span>Pass with 70% or more to earn your shareable certificate.</span>
+              </div>
+              <button className="send" onClick={startExam} disabled={examLoading}>
+                {examLoading ? "Preparing exam…" : "Take the exam ▸"}
+              </button>
+            </div>
+          )}
+
           {/* Responsive: video + panel side-by-side on wide screens (fills the
               side space); stacks with the panel below on narrow screens. When a
               quiz or re-explanation takes over, the panel is hidden and the
@@ -231,11 +299,18 @@ export default function CoursePage({ params }: { params: Promise<{ id: string }>
           <div className="player-wrap">
             {quizActive ? (
               <CourseQuiz
-                quizzes={quizActive}
+                quizzes={quizActive.quizzes}
+                kind={quizActive.kind}
                 courseId={course.id}
-                moduleId={selected!.id}
+                moduleId={selected?.id}
+                learnerName={learnerName}
                 onExit={() => setQuizActive(null)}
                 onRecorded={() => setResultsKey((k) => k + 1)}
+                onOutcome={(o) => {
+                  // Refresh gating state; capture a newly-issued certificate.
+                  load();
+                  if (o.certificate) setCertificate(o.certificate);
+                }}
               />
             ) : reexBusy ? (
               <div className="render-card standalone">
@@ -258,14 +333,28 @@ export default function CoursePage({ params }: { params: Promise<{ id: string }>
             )}
           </div>
 
+          {ready && !quizActive && isCert && selected!.status !== "completed" && (
+            <div className="req-strip">
+              <span className={`req-chip ${selected!.quizPassed ? "met" : ""}`}>
+                {selected!.quizPassed ? "✓" : "○"} Required quiz
+              </span>
+              <span className={`req-chip ${selected!.assignmentPassed ? "met" : ""}`}>
+                {selected!.assignmentPassed ? "✓" : "○"} Assignment
+              </span>
+              <span className="req-hint">
+                {canComplete ? "All set, you can complete this module." : "Pass both in the tabs below to complete this module."}
+              </span>
+            </div>
+          )}
+
           {ready && !quizActive && (
             <div className="module-foot">
               {override && (
                 <button className="ghost-btn" onClick={() => setOverride(null)}>◂ Back to the module video</button>
               )}
               {selected!.status !== "completed" ? (
-                <button className="send big" onClick={markComplete} disabled={completing}>
-                  {completing ? "Saving…" : "Mark module complete ▸"}
+                <button className="send big" onClick={markComplete} disabled={completing || !canComplete}>
+                  {completing ? "Saving…" : canComplete ? "Mark module complete ▸" : "Complete the requirements first"}
                 </button>
               ) : (
                 <span className="done-chip">✓ Completed</span>
@@ -281,9 +370,12 @@ export default function CoursePage({ params }: { params: Promise<{ id: string }>
                   key={selected!.id}
                   courseId={course.id}
                   moduleId={selected!.id}
+                  mode={course.mode}
+                  module={selected!}
                   playerRef={playerRef}
-                  onStartQuiz={(qs) => setQuizActive(qs)}
+                  onStartQuiz={(qs, kind) => setQuizActive({ quizzes: qs, kind })}
                   onNewExplainer={(ex) => setOverride(ex)}
+                  onProgress={load}
                   resultsKey={resultsKey}
                 />
               </div>

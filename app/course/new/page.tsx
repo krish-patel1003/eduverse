@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import AppNav from "@/components/AppNav";
-import type { Course } from "@/lib/types";
+import type { Course, CourseMode } from "@/lib/types";
 
 const ACCEPT = ".pdf,.docx,.xlsx,.xls,.csv,.txt,.md,image/*,application/pdf";
 
@@ -12,6 +12,7 @@ export default function NewCoursePage() {
   const [topic, setTopic] = useState("");
   const [goals, setGoals] = useState("");
   const [motivation, setMotivation] = useState("");
+  const [mode, setMode] = useState<CourseMode>("self_eval");
   const [files, setFiles] = useState<File[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -32,6 +33,7 @@ export default function NewCoursePage() {
       fd.set("topic", topic.trim());
       fd.set("goals", goals);
       fd.set("motivation", motivation.trim());
+      fd.set("mode", mode);
       files.forEach((f) => fd.append("files", f));
       const res = await fetch("/api/course/outline", { method: "POST", body: fd });
       const data = await res.json();
@@ -97,13 +99,37 @@ export default function NewCoursePage() {
               </label>
 
               <label className="field">
-                <span className="field-label">Why do you want this? (optional — helps us motivate you)</span>
+                <span className="field-label">Why do you want this? (optional, helps us motivate you)</span>
                 <input
                   value={motivation}
                   onChange={(e) => setMotivation(e.target.value)}
                   placeholder="e.g. for an interview, a class, a project…"
                 />
               </label>
+
+              <div className="field">
+                <span className="field-label">Course mode</span>
+                <div className="mode-pick">
+                  <button
+                    type="button"
+                    className={`mode-opt ${mode === "self_eval" ? "active" : ""}`}
+                    onClick={() => setMode("self_eval")}
+                  >
+                    <span className="mo-ico">🧭</span>
+                    <span className="mo-title">Self-evaluation</span>
+                    <span className="mo-desc">You're in control. Every module is open from the start, quizzes and assignments are optional. Learn at your own pace.</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`mode-opt ${mode === "certification" ? "active" : ""}`}
+                    onClick={() => setMode("certification")}
+                  >
+                    <span className="mo-ico">🎓</span>
+                    <span className="mo-title">Certification</span>
+                    <span className="mo-desc">Modules unlock in order. Each has a required quiz and assignment to pass, then a final exam earns a shareable certificate.</span>
+                  </button>
+                </div>
+              </div>
 
               <div className="field">
                 <span className="field-label">Reference material (optional)</span>
