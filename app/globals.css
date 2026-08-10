@@ -560,7 +560,12 @@ body {
 .draft-banner { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 12px 16px; background: rgba(110,168,254,.1); border: 1px solid var(--accent); border-radius: 10px; font-size: 14px; }
 .module-head h1 { margin: 0 0 4px; font-size: 22px; letter-spacing: -0.01em; }
 .module-summary { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.5; }
-.player-wrap { min-height: 0; }
+/* Keep the player at its natural height so the whole course-main scrolls
+   instead of flex-shrinking the player (which let its controls spill over
+   and overlap the Mark-complete button below). Fill the column width so the
+   video isn't boxed in with empty gutters on the sides. */
+.player-wrap { flex-shrink: 0; }
+.player-wrap .player { max-width: none; }
 .render-card.standalone { margin: 0; }
 .locked-note { padding: 48px 24px; text-align: center; color: var(--muted); background: var(--panel); border: 1px dashed var(--border); border-radius: 14px; }
 .module-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
