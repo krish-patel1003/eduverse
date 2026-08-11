@@ -14,6 +14,7 @@ export async function POST(req: NextRequest) {
   try {
     const form = await req.formData();
     const topic = String(form.get("topic") ?? "").trim();
+    const mode = String(form.get("mode") ?? "self_eval") === "certification" ? "certification" : "self_eval";
     const motivation = String(form.get("motivation") ?? "").trim() || undefined;
     const goals = String(form.get("goals") ?? "")
       .split("\n")
@@ -51,6 +52,7 @@ export async function POST(req: NextRequest) {
       title: outline.title,
       topic: topic || outline.title,
       goals,
+      mode,
       docContext: pageText || undefined,
       research,
       outline: outline.modules,

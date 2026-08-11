@@ -229,7 +229,12 @@ body {
   display: flex; flex-direction: column; gap: 10px;
 }
 .quiz-scroll { overflow-y: auto; display: flex; flex-direction: column; gap: 11px; min-height: 0; }
-.quiz-foot { flex-shrink: 0; }
+.quiz-foot { flex-shrink: 0; display: flex; align-items: center; gap: 10px; }
+.quiz-skip {
+  align-self: flex-start; padding: 10px 16px; border-radius: 9px; font-weight: 600; font-size: 14px;
+  background: transparent; border: 1px solid var(--border); color: var(--muted); cursor: pointer;
+}
+.quiz-skip:hover { color: var(--text); border-color: var(--accent); }
 .quiz-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .quiz-badge {
   font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
@@ -316,6 +321,22 @@ body {
 }
 .tick { position: absolute; top: 7px; width: 2px; height: 8px; background: var(--border); pointer-events: none; }
 .range { position: absolute; top: 5px; height: 12px; background: rgba(139, 124, 246, 0.35); border: 1px solid var(--violet); border-radius: 4px; pointer-events: none; }
+
+/* checkpoint markers on the timeline (click to jump to the question) */
+.q-marker {
+  position: absolute; top: 50%; transform: translate(-50%, -50%);
+  width: 16px; height: 16px; padding: 0; border: none; background: transparent;
+  cursor: pointer; z-index: 3; display: grid; place-items: center;
+}
+.q-marker-dot {
+  width: 11px; height: 11px; border-radius: 50%;
+  background: var(--accent); border: 2px solid var(--bg);
+  box-shadow: 0 0 0 1px var(--accent); transition: transform .12s;
+}
+.q-marker:hover .q-marker-dot { transform: scale(1.25); }
+.q-marker.done .q-marker-dot { background: var(--green); box-shadow: 0 0 0 1px var(--green); }
+.q-marker.skipped .q-marker-dot { background: var(--muted); box-shadow: 0 0 0 1px var(--muted); }
+.q-marker.active .q-marker-dot { background: #fff; box-shadow: 0 0 0 2px var(--accent); }
 
 .controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .controls button, .controls select {
@@ -755,4 +776,122 @@ body {
 @media (max-width: 900px) {
   .course-layout.two { grid-template-columns: 200px 1fr; }
   .cq-results-head { flex-direction: column; align-items: flex-start; }
+}
+
+/* ============================================================= */
+/* Course modes + certification badges                          */
+/* ============================================================= */
+
+/* ---- mode selector (new course) ---- */
+.mode-pick { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.mode-opt { text-align: left; display: flex; flex-direction: column; gap: 6px; padding: 16px; border-radius: 12px; background: var(--panel); border: 1px solid var(--border); color: var(--text); cursor: pointer; }
+.mode-opt:hover { border-color: var(--accent); }
+.mode-opt.active { border-color: var(--accent); background: rgba(110,168,254,.1); }
+.mo-ico { font-size: 22px; }
+.mo-title { font-weight: 700; font-size: 15px; }
+.mo-desc { color: var(--muted); font-size: 13px; line-height: 1.5; }
+
+/* ---- course card mode chip ---- */
+.cc-chips { display: flex; gap: 6px; }
+.cc-mode { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: var(--panel-2); color: var(--muted); }
+.cc-mode.certification { background: rgba(139,124,246,.18); color: var(--violet); }
+
+/* ---- requirements strip (cert module) ---- */
+.req-strip { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 14px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; }
+.req-chip { font-size: 13px; font-weight: 600; padding: 4px 10px; border-radius: 999px; background: var(--panel-2); color: var(--muted); }
+.req-chip.met { background: rgba(74,222,128,.16); color: var(--green); }
+.req-hint { color: var(--muted); font-size: 12.5px; margin-left: auto; }
+
+/* ---- panel tab check + required dot ---- */
+.mp-tab-check { color: var(--green); margin-right: 5px; font-weight: 800; }
+.mp-req-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--violet); margin-left: 6px; vertical-align: middle; }
+.req-passed { color: var(--green); font-size: 13.5px; }
+
+/* ---- required assignment ---- */
+.at-head-note { color: var(--muted); font-size: 13.5px; margin: 0 0 4px; }
+.ra-tasks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 14px; counter-reset: ra; }
+.ra-task { display: flex; flex-direction: column; gap: 7px; }
+.ra-task-text { font-size: 14px; font-weight: 600; }
+.ra-task-text::before { counter-increment: ra; content: counter(ra) ". "; color: var(--accent); }
+.ra-task textarea { background: var(--panel-2); border: 1px solid var(--border); color: var(--text); border-radius: 9px; padding: 9px 11px; font: inherit; font-size: 14px; resize: vertical; }
+.ra-task textarea:focus { outline: none; border-color: var(--accent); }
+.ra-feedback { font-size: 13px; line-height: 1.45; padding: 8px 10px; border-radius: 8px; }
+.ra-feedback.ok { background: rgba(74,222,128,.12); color: var(--green); }
+.ra-feedback.bad { background: rgba(248,113,113,.12); color: var(--red); }
+.ra-verdict { display: flex; flex-direction: column; gap: 3px; padding: 11px 13px; border-radius: 10px; font-size: 13.5px; }
+.ra-verdict.pass { background: rgba(74,222,128,.14); }
+.ra-verdict.fail { background: rgba(248,113,113,.14); }
+.ra-verdict span { color: var(--muted); }
+
+/* ---- exam / cert banners ---- */
+.cert-banner { display: flex; align-items: center; gap: 14px; padding: 14px 18px; border-radius: 12px; border: 1px solid var(--border); }
+.cert-banner.exam { background: linear-gradient(120deg, rgba(139,124,246,.16), rgba(110,168,254,.1)); border-color: var(--violet); }
+.cert-banner.earned { background: linear-gradient(120deg, rgba(74,222,128,.14), rgba(110,168,254,.08)); border-color: var(--green); }
+.cb-badge { font-size: 30px; }
+.cb-text { display: flex; flex-direction: column; gap: 2px; flex: 1; }
+.cb-text span { color: var(--muted); font-size: 13px; }
+.cert-banner .send { flex: 0 0 auto; }
+
+/* ---- quiz verdict banner (required/exam) ---- */
+.cq-verdict-banner { display: flex; align-items: center; gap: 14px; padding: 14px 16px; border-radius: 12px; }
+.cq-verdict-banner.pass { background: rgba(74,222,128,.14); }
+.cq-verdict-banner.fail { background: rgba(248,113,113,.14); }
+.cq-verdict-icon { font-size: 24px; font-weight: 800; }
+.cq-verdict-banner.pass .cq-verdict-icon { color: var(--green); }
+.cq-verdict-banner.fail .cq-verdict-icon { color: var(--red); }
+.cq-verdict-text { display: flex; flex-direction: column; gap: 2px; flex: 1; }
+.cq-verdict-text span { color: var(--muted); font-size: 13px; }
+.cq-cert-link { flex: 0 0 auto; text-decoration: none; }
+
+/* ---- certificate page ---- */
+.cert-page { max-width: 860px; margin: 0 auto; width: 100%; display: flex; flex-direction: column; align-items: center; gap: 20px; }
+.certificate { width: 100%; }
+.cert-frame {
+  position: relative; text-align: center; padding: 44px 40px 40px;
+  border-radius: 18px; color: #1a1e28;
+  background: linear-gradient(160deg, #fbfaf5, #eef1f8);
+  border: 2px solid #c9a24b; box-shadow: 0 20px 60px rgba(0,0,0,.45);
+}
+.cert-frame::before { content: ""; position: absolute; inset: 10px; border: 1px solid #c9a24b; border-radius: 12px; pointer-events: none; }
+.cert-top { display: flex; justify-content: space-between; align-items: center; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: #7a6a3a; }
+.cert-brand { font-weight: 800; }
+.cert-seal { font-size: 46px; margin: 14px 0 6px; }
+.cert-preamble { margin: 6px 0; color: #55607a; font-size: 14px; }
+.cert-name { margin: 6px 0; font-size: 34px; letter-spacing: -0.01em; font-family: "Caveat", cursive; color: #1a1e28; }
+.cert-course { margin: 4px 0 18px; font-size: 20px; color: #2b3550; }
+.cert-meta { display: flex; justify-content: center; gap: 34px; flex-wrap: wrap; margin-top: 10px; }
+.cert-meta > div { display: flex; flex-direction: column; gap: 2px; }
+.cm-label { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: #8a7a4a; }
+.cm-value { font-size: 16px; font-weight: 700; color: #1a1e28; }
+.cm-value.mono { font-family: ui-monospace, monospace; font-size: 14px; }
+.cert-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+.cert-verify { font-size: 12.5px; text-align: center; }
+
+/* ---- profile: name + certificates ---- */
+.small-note { font-size: 12.5px; margin: -6px 0 10px; }
+.name-row { display: flex; gap: 8px; }
+.name-input { flex: 1; background: var(--panel-2); border: 1px solid var(--border); color: var(--text); border-radius: 9px; padding: 9px 11px; font-size: 14px; }
+.name-input:focus { outline: none; border-color: var(--accent); }
+.cert-list { display: flex; flex-direction: column; gap: 8px; }
+.cert-row { display: flex; align-items: center; gap: 12px; padding: 10px 12px; background: var(--panel-2); border-radius: 10px; text-decoration: none; color: var(--text); }
+.cert-row:hover { outline: 1px solid var(--accent); }
+.cert-row-badge { font-size: 22px; }
+.cert-row-body { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.cert-row-title { font-weight: 600; font-size: 14px; }
+.cert-row-meta { color: var(--muted); font-size: 12.5px; }
+.cert-row-view { color: var(--accent); font-size: 13px; font-weight: 600; }
+
+/* ---- hub badges ---- */
+.badge-row { display: flex; gap: 12px; flex-wrap: wrap; }
+.badge-card { display: flex; flex-direction: column; gap: 4px; align-items: center; text-align: center; width: 150px; padding: 16px; border-radius: 14px; text-decoration: none; color: var(--text); background: linear-gradient(160deg, rgba(139,124,246,.14), var(--panel)); border: 1px solid var(--border); }
+.badge-card:hover { border-color: var(--violet); }
+.badge-emoji { font-size: 32px; }
+.badge-title { font-weight: 600; font-size: 13.5px; line-height: 1.3; }
+.badge-meta { color: var(--muted); font-size: 12px; }
+
+/* ---- print: only the certificate ---- */
+@media print {
+  .nav, .cert-actions, .cert-verify { display: none !important; }
+  .shell, .page { display: block; height: auto; overflow: visible; background: #fff; }
+  .cert-frame { box-shadow: none; }
 }

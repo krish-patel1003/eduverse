@@ -2,19 +2,25 @@
 
 import { useEffect, useState } from "react";
 import type { PlayerHandle } from "@/components/ExplainerPlayer";
+import type { QuizKind } from "@/components/CourseQuiz";
 import ModuleAssistant from "@/components/ModuleAssistant";
 import NotesTab from "@/components/NotesTab";
-import type { Explainer, LearningEvent, Quiz } from "@/lib/types";
+import type { AssignmentGrade, CourseMode, CourseModule, Explainer, LearningEvent, Quiz } from "@/lib/types";
 
 type Tab = "notes" | "quiz" | "ask" | "assignment";
 
 interface Props {
   courseId: string;
   moduleId: string;
+  mode: CourseMode;
+  /** The current module, for certification pass-state + required content. */
+  module: CourseModule;
   playerRef: React.RefObject<PlayerHandle | null>;
   /** Launch a sequential quiz that swaps in for the player. */
-  onStartQuiz: (quizzes: Quiz[]) => void;
+  onStartQuiz: (quizzes: Quiz[], kind: QuizKind) => void;
   onNewExplainer: (ex: Explainer) => void;
+  /** Reload the course (after a requirement is met) so gating state refreshes. */
+  onProgress: () => void;
   /** Bumped by the parent when a quiz was just recorded, to refresh past attempts. */
   resultsKey: number;
 }
@@ -26,31 +32,160 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "notes", label: "Notes" },
 ];
 
-export default function ModulePanel({ courseId, moduleId, playerRef, onStartQuiz, onNewExplainer, resultsKey }: Props) {
+export default function ModulePanel({
+  courseId,
+  moduleId,
+  mode,
+  module: mod,
+  playerRef,
+  onStartQuiz,
+  onNewExplainer,
+  onProgress,
+  resultsKey,
+}: Props) {
   const [tab, setTab] = useState<Tab>("ask");
+  const cert = mode === "certification";
 
   return (
     <div className="module-panel">
       <div className="mp-tabs">
-        {TABS.map((t) => (
-          <button key={t.id} className={`mp-tab ${tab === t.id ? "active" : ""}`} onClick={() => setTab(t.id)}>
-            {t.label}
-          </button>
-        ))}
+        {TABS.map((t) => {
+          const done = cert && ((t.id === "quiz" && mod.quizPassed) || (t.id === "assignment" && mod.assignmentPassed));
+          return (
+            <button key={t.id} className={`mp-tab ${tab === t.id ? "active" : ""}`} onClick={() => setTab(t.id)}>
+              {done && <span className="mp-tab-check">✓</span>}
+              {t.label}
+              {cert && (t.id === "quiz" || t.id === "assignment") && <span className="mp-req-dot" title="Required" />}
+            </button>
+          );
+        })}
       </div>
       <div className="mp-body">
         {tab === "ask" && <ModuleAssistant courseId={courseId} moduleId={moduleId} onNewExplainer={onNewExplainer} />}
-        {tab === "quiz" && (
-          <QuizTab courseId={courseId} moduleId={moduleId} onStartQuiz={onStartQuiz} resultsKey={resultsKey} />
-        )}
-        {tab === "assignment" && <AssignmentTab courseId={courseId} moduleId={moduleId} />}
+        {tab === "quiz" &&
+          (cert ? (
+            <RequiredQuizTab module={mod} onStart={(qs) => onStartQuiz(qs, "required")} />
+          ) : (
+            <QuizTab courseId={courseId} moduleId={moduleId} onStartQuiz={(qs) => onStartQuiz(qs, "practice")} resultsKey={resultsKey} />
+          ))}
+        {tab === "assignment" &&
+          (cert ? (
+            <RequiredAssignmentTab courseId={courseId} moduleId={moduleId} module={mod} onProgress={onProgress} />
+          ) : (
+            <AssignmentTab courseId={courseId} moduleId={moduleId} />
+          ))}
         {tab === "notes" && <NotesTab courseId={courseId} moduleId={moduleId} playerRef={playerRef} />}
       </div>
     </div>
   );
 }
 
-// ---- Quiz launcher + past attempts ----------------------------------------
+// ---- certification: required quiz ------------------------------------------
+
+function RequiredQuizTab({ module: mod, onStart }: { module: CourseModule; onStart: (q: Quiz[]) => void }) {
+  const quiz = mod.requiredQuiz ?? [];
+  return (
+    <div className="quiz-tab">
+      <div className="qt-intro">
+        {mod.quizPassed ? (
+          <p className="req-passed">✓ You passed this module's required quiz. You can retake it any time.</p>
+        ) : (
+          <p>This module has a <b>required quiz</b>. Score 70% or more to satisfy the requirement. Questions run one at a time and swap in for the video.</p>
+        )}
+        <button className="send big" onClick={() => onStart(quiz)} disabled={quiz.length === 0}>
+          {quiz.length === 0 ? "Preparing quiz…" : mod.quizPassed ? "Retake quiz ▸" : "Start required quiz ▸"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ---- certification: required, AI-graded assignment -------------------------
+
+function RequiredAssignmentTab({
+  courseId,
+  moduleId,
+  module: mod,
+  onProgress,
+}: {
+  courseId: string;
+  moduleId: string;
+  module: CourseModule;
+  onProgress: () => void;
+}) {
+  const tasks = mod.requiredAssignment ?? [];
+  const [answers, setAnswers] = useState<string[]>(() => tasks.map((_, i) => mod.assignmentSubmission?.[i] ?? ""));
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [grade, setGrade] = useState<AssignmentGrade | null>(null);
+
+  async function submit() {
+    if (busy) return;
+    if (answers.every((a) => !a.trim())) {
+      setError("Write your answers before submitting.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/course/${courseId}/module/${moduleId}/submit-assignment`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ answers }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error ?? "Grading failed");
+      setGrade(data.grade as AssignmentGrade);
+      onProgress();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Grading failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (tasks.length === 0) return <p className="nt-empty">Preparing the assignment…</p>;
+
+  return (
+    <div className="assignment-tab">
+      {mod.assignmentPassed && !grade && (
+        <p className="req-passed">✓ You passed this module's assignment. You can revise and resubmit if you like.</p>
+      )}
+      <p className="at-head-note">Answer each task in your own words, then submit for grading. You need to pass to complete the module.</p>
+      <ol className="ra-tasks">
+        {tasks.map((t, i) => (
+          <li key={i} className="ra-task">
+            <div className="ra-task-text">{t}</div>
+            <textarea
+              value={answers[i]}
+              onChange={(e) => setAnswers((a) => a.map((x, j) => (j === i ? e.target.value : x)))}
+              placeholder="Your answer…"
+              rows={3}
+            />
+            {grade?.perTask[i] && (
+              <div className={`ra-feedback ${grade.perTask[i].ok ? "ok" : "bad"}`}>
+                <b>{grade.perTask[i].ok ? "✓ " : "✗ "}</b>
+                {grade.perTask[i].feedback}
+              </div>
+            )}
+          </li>
+        ))}
+      </ol>
+      {grade && (
+        <div className={`ra-verdict ${grade.passed ? "pass" : "fail"}`}>
+          <b>{grade.passed ? "Passed" : "Not passed yet"} · {grade.score}%</b>
+          {grade.overall && <span>{grade.overall}</span>}
+        </div>
+      )}
+      {error && <div className="err small">{error}</div>}
+      <button className="send big" onClick={submit} disabled={busy}>
+        {busy ? "Grading your answers…" : grade ? "Resubmit ↻" : "Submit for grading ▸"}
+      </button>
+    </div>
+  );
+}
+
+// ---- self-eval: on-demand quiz launcher + past attempts --------------------
 
 const dt = (ms: number) => {
   const s = Math.floor((Date.now() - ms) / 1000);
@@ -137,8 +272,6 @@ function QuizTab({
     </div>
   );
 }
-
-// ---- Assignment ------------------------------------------------------------
 
 function AssignmentTab({ courseId, moduleId }: { courseId: string; moduleId: string }) {
   const [loading, setLoading] = useState(false);

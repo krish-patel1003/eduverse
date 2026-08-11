@@ -4,6 +4,7 @@
 // generator uses to ADAPT later videos to how this person learns.
 
 import { db, newId, now, parseJson, DEFAULT_STUDENT } from "./db";
+import { listCertificates } from "./store";
 import type {
   ConceptStat,
   CourseProgress,
@@ -19,6 +20,7 @@ const KNOWN_THRESHOLD = 0.65;
 
 interface StudentRow {
   id: string;
+  name: string | null;
   motivation: string | null;
   learning_style: string;
   goals: string;
@@ -128,6 +130,7 @@ export function getProfile(id = DEFAULT_STUDENT): StudentProfile {
 
   return {
     id,
+    name: student.name ?? undefined,
     motivation: student.motivation ?? undefined,
     goals: parseJson<string[]>(student.goals, []),
     learningStyle: parseJson<LearningStyle>(student.learning_style, {}),
@@ -136,6 +139,7 @@ export function getProfile(id = DEFAULT_STUDENT): StudentProfile {
     practiceHistory: events,
     mistakes: events.filter((e) => e.isCorrect === false),
     progress,
+    certificates: listCertificates(id),
   };
 }
 
@@ -235,15 +239,22 @@ export function updateLearningStyle(patch: Partial<LearningStyle>, studentId = D
 }
 
 export function updateStudentMeta(
-  patch: { motivation?: string; goals?: string[] },
+  patch: { name?: string; motivation?: string; goals?: string[] },
   studentId = DEFAULT_STUDENT
 ): void {
   ensureStudent(studentId);
   const conn = db();
+  if (patch.name !== undefined)
+    conn.prepare(`UPDATE students SET name = ? WHERE id = ?`).run(patch.name, studentId);
   if (patch.motivation !== undefined)
     conn.prepare(`UPDATE students SET motivation = ? WHERE id = ?`).run(patch.motivation, studentId);
   if (patch.goals !== undefined)
     conn.prepare(`UPDATE students SET goals = ? WHERE id = ?`).run(JSON.stringify(patch.goals), studentId);
+}
+
+/** The learner's display name (for certificates), or empty string. */
+export function getStudentName(studentId = DEFAULT_STUDENT): string {
+  return ensureStudent(studentId).name ?? "";
 }
 
 /** Past quiz-attempt summaries for a module (newest first), for "revisit results". */

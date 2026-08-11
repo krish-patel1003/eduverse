@@ -425,10 +425,15 @@ interface QuizCardProps {
   index: number;
   count: number;
   onPass: (result: { firstSelection: string[]; tries: number; firstTryCorrect: boolean }) => void;
+  /** Dismiss the checkpoint and keep watching without answering. */
+  onSkip: () => void;
 }
 
-/** Full-takeover checkpoint card. Gates progress until the learner is right. */
-function QuizCard({ quiz, index, count, onPass }: QuizCardProps) {
+/**
+ * Checkpoint card that pops when playback naturally reaches it. It is NOT a hard
+ * gate: the learner can answer, or skip (or just scrub past it on the timeline).
+ */
+function QuizCard({ quiz, index, count, onPass, onSkip }: QuizCardProps) {
   const [selected, setSelected] = useState<string[]>([]);
   const [submitted, setSubmitted] = useState(false);
   const [outcome, setOutcome] = useState<"correct" | "wrong" | null>(null);
@@ -532,15 +537,21 @@ function QuizCard({ quiz, index, count, onPass }: QuizCardProps) {
 
         <div className="quiz-foot">
           {!showResult && (
-            <button className="quiz-submit" onClick={submit} disabled={selected.length === 0}>
-              Submit answer
-            </button>
+            <>
+              <button className="quiz-skip" onClick={onSkip}>Skip for now</button>
+              <button className="quiz-submit" onClick={submit} disabled={selected.length === 0}>
+                Submit answer
+              </button>
+            </>
           )}
           {showResult && outcome === "correct" && (
             <button className="quiz-continue" onClick={cont}>Continue →</button>
           )}
           {showResult && outcome === "wrong" && (
-            <button className="quiz-retry" onClick={retry}>↻ Try again</button>
+            <>
+              <button className="quiz-skip" onClick={onSkip}>Skip</button>
+              <button className="quiz-retry" onClick={retry}>↻ Try again</button>
+            </>
           )}
         </div>
       </div>
@@ -624,6 +635,11 @@ const ExplainerPlayer = forwardRef<PlayerHandle, Props>(function ExplainerPlayer
   const interactive = explainer.style === "interactive" && quizzes.length > 0;
   const [activeQuiz, setActiveQuiz] = useState<Quiz | null>(null);
   const [passedIds, setPassedIds] = useState<string[]>([]);
+  // Checkpoints the learner chose to skip (or scrubbed past). They no longer
+  // gate playback and never auto-pop, but stay reachable via timeline markers.
+  const [skippedIds, setSkippedIds] = useState<string[]>([]);
+  // Scene index whose natural end just gated playback and should pop its quiz.
+  const [gateScene, setGateScene] = useState<number | null>(null);
   const [results, setResults] = useState<QuizResult[]>([]);
   const [showReview, setShowReview] = useState(false);
 
@@ -650,13 +666,20 @@ const ExplainerPlayer = forwardRef<PlayerHandle, Props>(function ExplainerPlayer
   // Fresh views of quiz state for the audio/rAF event closures.
   const quizzesRef = useRef(quizzes);
   const passedRef = useRef(passedIds);
+  const skippedRef = useRef(skippedIds);
+  const activeQuizRef = useRef<Quiz | null>(activeQuiz);
   quizzesRef.current = quizzes;
   passedRef.current = passedIds;
-  // True when scene `idx` ends on an un-passed checkpoint → playback must stop
-  // there instead of rolling into the next scene.
+  skippedRef.current = skippedIds;
+  activeQuizRef.current = activeQuiz;
+  // True when scene `idx` ends on a checkpoint the learner hasn't passed OR
+  // skipped → natural playback pauses there to pop the question. Skipping (or
+  // scrubbing past) a checkpoint clears the gate so it won't stop playback again.
   const isGatedAfter = useCallback(
     (idx: number) =>
-      quizzesRef.current.some((q) => q.afterScene === idx && !passedRef.current.includes(q.id)),
+      quizzesRef.current.some(
+        (q) => q.afterScene === idx && !passedRef.current.includes(q.id) && !skippedRef.current.includes(q.id)
+      ),
     []
   );
 
@@ -803,6 +826,7 @@ const ExplainerPlayer = forwardRef<PlayerHandle, Props>(function ExplainerPlayer
           if (isGatedAfter(idx)) {
             setElapsed(Math.max(0, (starts[idx + 1] ?? total) - 1));
             setPlaying(false);
+            setGateScene(idx);
           } else if (idx + 1 < scenes.length) setElapsed(starts[idx + 1] ?? total);
           else {
             setElapsed(total);
@@ -850,6 +874,7 @@ const ExplainerPlayer = forwardRef<PlayerHandle, Props>(function ExplainerPlayer
       if (isGatedAfter(idx)) {
         setElapsed(Math.max(0, (starts[idx + 1] ?? total) - 1));
         setPlaying(false);
+        setGateScene(idx);
       } else if (idx + 1 < explainer.scenes.length) setElapsed(starts[idx + 1] ?? total);
       else {
         setElapsed(total);
@@ -882,26 +907,26 @@ const ExplainerPlayer = forwardRef<PlayerHandle, Props>(function ExplainerPlayer
     onTimeUpdate?.(elapsed);
   }, [elapsed, onTimeUpdate]);
 
-  // Interactive gate: when playback reaches the end of a scene that has an
-  // un-passed checkpoint, freeze on that scene and show the quiz. This also
-  // catches forward scrubbing past a checkpoint.
+  // Pop a checkpoint ONLY when natural playback has just gated at its scene end
+  // (signalled by setGateScene from the rAF/audio stop). Seeking never sets
+  // gateScene, so scrubbing ahead past checkpoints does not force them, and the
+  // learner is not made to answer questions they skipped over.
   useEffect(() => {
-    if (!interactive || activeQuiz) return;
-    const passed = new Set(passedIds);
-    const gate = quizzes.find((q) => {
-      if (passed.has(q.id)) return false;
-      const b = (starts[q.afterScene] ?? 0) + (durations[q.afterScene] ?? 0);
-      return elapsed >= b - 2;
-    });
-    if (gate) {
-      setPlaying(false);
-      pauseNarration();
-      const b = (starts[gate.afterScene] ?? 0) + (durations[gate.afterScene] ?? 0);
-      setElapsed(Math.max(0, b - 1)); // hold on the scene just finished
-      spokenScene.current = gate.afterScene;
-      setActiveQuiz(gate);
+    if (gateScene == null) return;
+    if (!interactive || activeQuiz) {
+      setGateScene(null);
+      return;
     }
-  }, [interactive, activeQuiz, passedIds, quizzes, elapsed, starts, durations, pauseNarration]);
+    const q = quizzes.find(
+      (x) => x.afterScene === gateScene && !passedIds.includes(x.id) && !skippedIds.includes(x.id)
+    );
+    if (q) {
+      pauseNarration();
+      spokenScene.current = gateScene;
+      setActiveQuiz(q);
+    }
+    setGateScene(null);
+  }, [gateScene, interactive, activeQuiz, quizzes, passedIds, skippedIds, pauseNarration]);
 
   const passQuiz = useCallback(
     (res: { firstSelection: string[]; tries: number; firstTryCorrect: boolean }) => {
@@ -913,6 +938,7 @@ const ExplainerPlayer = forwardRef<PlayerHandle, Props>(function ExplainerPlayer
           : [...prev, { quiz: q, ...res }]
       );
       setPassedIds((p) => (p.includes(q.id) ? p : [...p, q.id]));
+      setSkippedIds((s) => s.filter((id) => id !== q.id));
       setActiveQuiz(null);
       const k = q.afterScene;
       if (k + 1 < explainer.scenes.length) {
@@ -939,6 +965,8 @@ const ExplainerPlayer = forwardRef<PlayerHandle, Props>(function ExplainerPlayer
     setClipMode(false);
     setActiveQuiz(null);
     setPassedIds([]);
+    setSkippedIds([]);
+    setGateScene(null);
     setResults([]);
     setShowReview(false);
     spokenScene.current = -1;
@@ -952,6 +980,14 @@ const ExplainerPlayer = forwardRef<PlayerHandle, Props>(function ExplainerPlayer
 
   const positionTo = useCallback(
     (ms: number, shouldPlay: boolean) => {
+      // Seeking never forces a checkpoint: if one is popped, dismiss it and mark
+      // it skipped so it won't gate playback (it stays reachable via its marker).
+      const aq = activeQuizRef.current;
+      if (aq) {
+        setSkippedIds((s) => (s.includes(aq.id) ? s : [...s, aq.id]));
+        setActiveQuiz(null);
+      }
+      setGateScene(null);
       const clamped = Math.max(0, Math.min(total, ms));
       setElapsed(clamped);
       const idx = sceneIndexFor(clamped);
@@ -960,6 +996,31 @@ const ExplainerPlayer = forwardRef<PlayerHandle, Props>(function ExplainerPlayer
       if (shouldPlay) startNarration(idx, clamped - (starts[idx] ?? 0));
     },
     [total, sceneIndexFor, pauseNarration, startNarration, starts]
+  );
+
+  // Dismiss the popped checkpoint without answering and continue watching.
+  const skipActiveQuiz = useCallback(() => {
+    const aq = activeQuizRef.current;
+    if (!aq) return;
+    setSkippedIds((s) => (s.includes(aq.id) ? s : [...s, aq.id]));
+    setActiveQuiz(null);
+    setGateScene(null);
+    spokenScene.current = -1;
+    setPlaying(true);
+  }, []);
+
+  // Jump to a checkpoint from its timeline marker and open its question.
+  const jumpToQuiz = useCallback(
+    (q: Quiz) => {
+      const b = (starts[q.afterScene] ?? 0) + (durations[q.afterScene] ?? 0);
+      setPlaying(false);
+      pauseNarration();
+      setGateScene(null);
+      setElapsed(Math.max(0, b - 1));
+      spokenScene.current = q.afterScene;
+      setActiveQuiz(q);
+    },
+    [starts, durations, pauseNarration]
   );
 
   useImperativeHandle(ref, () => ({
@@ -1001,6 +1062,17 @@ const ExplainerPlayer = forwardRef<PlayerHandle, Props>(function ExplainerPlayer
   }
 
   function togglePlay() {
+    // Pressing play with a checkpoint popped skips it (marks it skipped) and
+    // keeps watching, rather than forcing an answer.
+    const aq = activeQuizRef.current;
+    if (aq) {
+      setSkippedIds((s) => (s.includes(aq.id) ? s : [...s, aq.id]));
+      setActiveQuiz(null);
+      setGateScene(null);
+      spokenScene.current = -1;
+      setPlaying(true);
+      return;
+    }
     if (elapsed >= total) {
       setElapsed(0);
       spokenScene.current = -1;
@@ -1028,28 +1100,37 @@ const ExplainerPlayer = forwardRef<PlayerHandle, Props>(function ExplainerPlayer
         k.positionTo(Math.max(0, Math.min(k.total, k.elapsed + d)), playingRef.current);
       const jumpTo = (frac: number) => k.positionTo(frac * k.total, playingRef.current);
 
+      // Checkpoints no longer trap the player: play/seek shortcuts work while a
+      // question is popped (they dismiss it as a skip, same as scrubbing).
       if (key === " " || key === "k") {
         e.preventDefault();
-        if (!k.activeQuiz) k.togglePlay();
+        k.togglePlay();
       } else if (key === "f") {
         e.preventDefault();
         k.toggleFullscreen();
       } else if (key === "m") {
         setMuted((m) => !m);
       } else if (key === "j") {
-        if (!k.activeQuiz) { e.preventDefault(); seek(-10000); }
+        e.preventDefault();
+        seek(-10000);
       } else if (key === "l") {
-        if (!k.activeQuiz) { e.preventDefault(); seek(10000); }
+        e.preventDefault();
+        seek(10000);
       } else if (key === "ArrowLeft") {
-        if (!k.activeQuiz) { e.preventDefault(); seek(-5000); }
+        e.preventDefault();
+        seek(-5000);
       } else if (key === "ArrowRight") {
-        if (!k.activeQuiz) { e.preventDefault(); seek(5000); }
+        e.preventDefault();
+        seek(5000);
       } else if (key === "Home") {
-        if (!k.activeQuiz) { e.preventDefault(); jumpTo(0); }
+        e.preventDefault();
+        jumpTo(0);
       } else if (key === "End") {
-        if (!k.activeQuiz) { e.preventDefault(); jumpTo(1); }
+        e.preventDefault();
+        jumpTo(1);
       } else if (/^[0-9]$/.test(key)) {
-        if (!k.activeQuiz) { e.preventDefault(); jumpTo(Number(key) / 10); }
+        e.preventDefault();
+        jumpTo(Number(key) / 10);
       }
     };
     window.addEventListener("keydown", onKey);
@@ -1169,6 +1250,7 @@ const ExplainerPlayer = forwardRef<PlayerHandle, Props>(function ExplainerPlayer
             index={quizzes.findIndex((q) => q.id === activeQuiz.id)}
             count={quizzes.length}
             onPass={passQuiz}
+            onSkip={skipActiveQuiz}
           />
         )}
         {showReview && <QuizReview results={results} onClose={() => setShowReview(false)} />}
@@ -1202,12 +1284,29 @@ const ExplainerPlayer = forwardRef<PlayerHandle, Props>(function ExplainerPlayer
           onChange={(e) => positionTo(Number(e.target.value), playing)}
           className="scrub"
           aria-label="Seek"
-          disabled={!!activeQuiz}
         />
+        {/* Checkpoint markers: click to jump to that question. */}
+        {interactive &&
+          quizzes.map((q, i) => {
+            const b = (starts[q.afterScene] ?? 0) + (durations[q.afterScene] ?? 0);
+            const state = passedIds.includes(q.id) ? "done" : skippedIds.includes(q.id) ? "skipped" : "pending";
+            return (
+              <button
+                key={q.id}
+                type="button"
+                className={`q-marker ${state} ${activeQuiz?.id === q.id ? "active" : ""}`}
+                style={{ left: pct(Math.max(0, b - 1)) }}
+                title={`Checkpoint ${i + 1}${state === "done" ? " (answered)" : state === "skipped" ? " (skipped)" : ""} — click to open`}
+                onClick={() => jumpToQuiz(q)}
+              >
+                <span className="q-marker-dot" />
+              </button>
+            );
+          })}
       </div>
 
       <div className="controls">
-        <button className="play" onClick={togglePlay} disabled={!!activeQuiz}>
+        <button className="play" onClick={togglePlay}>
           {elapsed >= total ? "↻ Replay" : playing ? "❚❚ Pause" : "▶ Play"}
         </button>
         <span className="time">

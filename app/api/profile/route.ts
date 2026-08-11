@@ -21,11 +21,12 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
-    const meta: { motivation?: string; goals?: string[] } = {};
+    const meta: { name?: string; motivation?: string; goals?: string[] } = {};
+    if (typeof body?.name === "string") meta.name = body.name.trim().slice(0, 80);
     if (typeof body?.motivation === "string") meta.motivation = body.motivation.trim();
     if (Array.isArray(body?.goals))
       meta.goals = body.goals.filter((g: unknown) => typeof g === "string" && g.trim()).map((g: string) => g.trim());
-    if (meta.motivation !== undefined || meta.goals !== undefined) updateStudentMeta(meta);
+    if (meta.name !== undefined || meta.motivation !== undefined || meta.goals !== undefined) updateStudentMeta(meta);
 
     if (body?.learningStyle && typeof body.learningStyle === "object") {
       updateLearningStyle(body.learningStyle as Partial<LearningStyle>);
