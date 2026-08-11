@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getModule } from "@/lib/store";
+import { getCourse, getModule } from "@/lib/store";
 import { generateQuiz, generateAssignment, answerDoubt } from "@/lib/course";
 import { reExplainRange } from "@/lib/gemini";
 import {
@@ -47,16 +47,17 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       return NextResponse.json({ error: "Module not found" }, { status: 404 });
     }
 
+    const studentId = getCourse(id)?.studentId;
     const body = await req.json().catch(() => ({}));
     const type = String(body?.type ?? "");
     const request = String(body?.request ?? "").trim();
     const context = moduleContext(mod.explainer);
-    const hint = learnerHint();
+    const hint = learnerHint(studentId);
 
     switch (type) {
       case "quiz": {
         const quizzes = await generateQuiz({ context, hint });
-        recordEvent({ type: "quiz_generated", moduleId: mid, data: { count: quizzes.length } });
+        recordEvent({ type: "quiz_generated", moduleId: mid, data: { count: quizzes.length }, studentId });
         return NextResponse.json({ quizzes });
       }
 
@@ -70,7 +71,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
                 isCorrect: it.isCorrect === true,
               }))
           : [];
-        applyQuizResult(items, mid);
+        applyQuizResult(items, mid, studentId);
         // Persist a full attempt summary so results can be revisited later.
         const correct = items.filter((i: { isCorrect: boolean }) => i.isCorrect).length;
         recordEvent({
@@ -78,20 +79,21 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
           moduleId: mid,
           isCorrect: items.length > 0 && correct === items.length,
           data: { total: items.length, correct, items },
+          studentId,
         });
         return NextResponse.json({ ok: true });
       }
 
       case "assignment": {
         const tasks = await generateAssignment({ context, hint });
-        recordEvent({ type: "assignment", moduleId: mid, data: { tasks } });
+        recordEvent({ type: "assignment", moduleId: mid, data: { tasks }, studentId });
         return NextResponse.json({ tasks });
       }
 
       case "doubt": {
         if (!request) return NextResponse.json({ error: "Ask a question." }, { status: 400 });
         const answer = await answerDoubt({ question: request, context, hint });
-        recordEvent({ type: "doubt", moduleId: mid, data: { question: request } });
+        recordEvent({ type: "doubt", moduleId: mid, data: { question: request }, studentId });
         return NextResponse.json({ answer });
       }
 
@@ -100,7 +102,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
         // persist and adapt future modules; the concrete subject request does
         // NOT stick (so we never pin everything to one analogy domain).
         const patch = inferStyle(request);
-        const style = updateLearningStyle(patch);
+        const style = updateLearningStyle(patch, studentId);
         // `focus` = a specific clip's narration to re-explain (from "Re-explain
         // this clip"); otherwise re-explain the whole module.
         const focus = typeof body?.focus === "string" && body.focus.trim() ? body.focus.trim() : "";
@@ -111,7 +113,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
           userNote: request || undefined,
           learnerBlock: hintToPrompt({ style, weakConcepts: hint.weakConcepts, motivation: hint.motivation }),
         });
-        recordEvent({ type: "explain_again", moduleId: mid, data: { request, clip: Boolean(focus) } });
+        recordEvent({ type: "explain_again", moduleId: mid, data: { request, clip: Boolean(focus) }, studentId });
         return NextResponse.json({ explainer, style });
       }
 

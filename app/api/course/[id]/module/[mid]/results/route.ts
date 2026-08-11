@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getModule } from "@/lib/store";
+import { getCourse, getModule } from "@/lib/store";
 import { listQuizResults } from "@/lib/profile";
 
 export const runtime = "nodejs";
@@ -10,7 +10,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
     const { id, mid } = await ctx.params;
     const mod = getModule(mid);
     if (!mod || mod.courseId !== id) return NextResponse.json({ error: "Module not found" }, { status: 404 });
-    return NextResponse.json({ results: listQuizResults(mid) });
+    return NextResponse.json({ results: listQuizResults(mid, getCourse(id)?.studentId) });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "Failed" }, { status: 500 });
   }

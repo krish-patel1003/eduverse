@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getModule, saveAssignmentSubmission } from "@/lib/store";
+import { getCourse, getModule, saveAssignmentSubmission } from "@/lib/store";
 import { gradeAssignment } from "@/lib/course";
 import { learnerHint, recordEvent } from "@/lib/profile";
 
@@ -24,11 +24,12 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       return NextResponse.json({ error: "Write your answers before submitting." }, { status: 400 });
     }
 
+    const studentId = getCourse(id)?.studentId;
     const context = (mod.explainer?.scenes ?? []).map((s) => s.narration).filter(Boolean).join(" ").slice(0, 6000);
-    const grade = await gradeAssignment({ tasks, answers, context, hint: learnerHint() });
+    const grade = await gradeAssignment({ tasks, answers, context, hint: learnerHint(studentId) });
 
     saveAssignmentSubmission(mid, answers, grade.passed);
-    recordEvent({ type: "req_assignment", moduleId: mid, isCorrect: grade.passed, data: { score: grade.score } });
+    recordEvent({ type: "req_assignment", moduleId: mid, isCorrect: grade.passed, data: { score: grade.score }, studentId });
 
     return NextResponse.json({ grade });
   } catch (err) {
