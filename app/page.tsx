@@ -39,8 +39,17 @@ export default function Home() {
           <p>Build a full, adaptive course for yourself, or ask for a single quick explainer.</p>
         </header>
 
-        <div className="mode-cards">
-          <Link href="/course/new" className="mode-card primary">
+        <div className="mode-cards three">
+          <Link href="/adaptive" className="mode-card primary">
+            <span className="mode-ico">🧭</span>
+            <span className="mode-title">Adaptive Tutor</span>
+            <span className="mode-desc">
+              We diagnose what you struggle with, then teach and re-teach, testing you until you
+              truly master each weak spot.
+            </span>
+            <span className="mode-cta">Start learning ▸</span>
+          </Link>
+          <Link href="/course/new" className="mode-card">
             <span className="mode-ico">🎓</span>
             <span className="mode-title">Build a course</span>
             <span className="mode-desc">
