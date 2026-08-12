@@ -4,6 +4,7 @@ import { createCourse } from "@/lib/store";
 import { extractFiles } from "@/lib/extract";
 import { learnerHint, updateStudentMeta } from "@/lib/profile";
 import { researchTopic } from "@/lib/research";
+import { currentStudentId } from "@/lib/auth";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -26,8 +27,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Add a topic or attach material." }, { status: 400 });
     }
 
+    const studentId = currentStudentId(req);
     // Persist motivation/goals onto the profile so future modules can use them.
-    updateStudentMeta({ motivation, goals: goals.length ? goals : undefined });
+    updateStudentMeta({ motivation, goals: goals.length ? goals : undefined }, studentId);
 
     const { pageText } = await extractFiles(files);
 
@@ -44,7 +46,7 @@ export async function POST(req: NextRequest) {
       goals,
       motivation,
       pageText,
-      hint: learnerHint(),
+      hint: learnerHint(studentId),
       research,
     });
 
@@ -56,6 +58,7 @@ export async function POST(req: NextRequest) {
       docContext: pageText || undefined,
       research,
       outline: outline.modules,
+      studentId,
     });
 
     return NextResponse.json({ course });

@@ -107,9 +107,69 @@ function migrate(db: Database.Database): void {
       issued_at    INTEGER NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS users (
+      id         TEXT PRIMARY KEY,
+      email      TEXT NOT NULL UNIQUE,
+      pass_hash  TEXT NOT NULL,
+      salt       TEXT NOT NULL,
+      created_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS sessions (
+      id         TEXT PRIMARY KEY,
+      user_id    TEXT NOT NULL,
+      expires_at INTEGER NOT NULL
+    );
+
+    -- Adaptive Tutor: diagnostic + recursive mastery loop.
+    CREATE TABLE IF NOT EXISTS weak_areas (
+      id         TEXT PRIMARY KEY,
+      student_id TEXT NOT NULL,
+      topic      TEXT NOT NULL,
+      aspect     TEXT NOT NULL,
+      domain     TEXT NOT NULL DEFAULT 'general',
+      level      TEXT,
+      mastery    REAL NOT NULL DEFAULT 0,
+      status     TEXT NOT NULL DEFAULT 'weak',
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS diagnostics (
+      id          TEXT PRIMARY KEY,
+      student_id  TEXT NOT NULL,
+      topic       TEXT NOT NULL,
+      level       TEXT,
+      domain      TEXT NOT NULL DEFAULT 'general',
+      items       TEXT NOT NULL DEFAULT '[]',
+      answers     TEXT,
+      per_aspect  TEXT,
+      overall     INTEGER,
+      rank        TEXT,
+      status      TEXT NOT NULL DEFAULT 'open',
+      created_at  INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS adaptive_sessions (
+      id          TEXT PRIMARY KEY,
+      student_id  TEXT NOT NULL,
+      weak_area_id TEXT NOT NULL,
+      topic       TEXT NOT NULL,
+      aspect      TEXT NOT NULL,
+      domain      TEXT NOT NULL DEFAULT 'general',
+      status      TEXT NOT NULL DEFAULT 'teaching',
+      rounds      TEXT NOT NULL DEFAULT '[]',
+      created_at  INTEGER NOT NULL,
+      updated_at  INTEGER NOT NULL
+    );
+
     CREATE INDEX IF NOT EXISTS idx_concepts_student ON concepts (student_id);
     CREATE INDEX IF NOT EXISTS idx_notes_module ON notes (module_id, t_ms);
     CREATE INDEX IF NOT EXISTS idx_certs_student ON certificates (student_id);
+    CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions (user_id);
+    CREATE INDEX IF NOT EXISTS idx_weak_student ON weak_areas (student_id);
+    CREATE INDEX IF NOT EXISTS idx_diag_student ON diagnostics (student_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_adapt_student ON adaptive_sessions (student_id, created_at);
   `);
 
   // Additive migrations for columns older DBs may lack. Each is idempotent.
@@ -126,6 +186,10 @@ function migrate(db: Database.Database): void {
   addCol("modules", "assignment_submission", "assignment_submission TEXT");
   addCol("modules", "quiz_passed", "quiz_passed INTEGER NOT NULL DEFAULT 0");
   addCol("modules", "assignment_passed", "assignment_passed INTEGER NOT NULL DEFAULT 0");
+  // Adaptive Tutor: learner demographics on the student profile.
+  addCol("students", "age", "age INTEGER");
+  addCol("students", "gender", "gender TEXT");
+  addCol("students", "education_level", "education_level TEXT");
 
   // Ensure the single implicit student exists.
   db.prepare(

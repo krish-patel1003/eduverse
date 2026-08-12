@@ -29,9 +29,9 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: strin
 
     const updated = completeModuleUnlockNext(mid);
     // Finishing a module is weak positive evidence for its concepts.
-    for (const obj of mod.objectives) upsertConcept(obj, 0.1);
-    upsertConcept(mod.title, 0.1);
-    recordEvent({ type: "module_completed", moduleId: mid, isCorrect: true, data: { title: mod.title } });
+    for (const obj of mod.objectives) upsertConcept(obj, 0.1, course.studentId);
+    upsertConcept(mod.title, 0.1, course.studentId);
+    recordEvent({ type: "module_completed", moduleId: mid, isCorrect: true, data: { title: mod.title }, studentId: course.studentId });
 
     return NextResponse.json({ course: updated });
   } catch (err) {

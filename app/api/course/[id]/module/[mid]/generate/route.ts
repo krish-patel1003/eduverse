@@ -24,10 +24,10 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: strin
       return NextResponse.json({ explainer: mod.explainer, cached: true });
     }
 
-    const hint = learnerHint();
+    const hint = learnerHint(course.studentId);
     const explainer = await generateModuleExplainer(course, mod, hint);
     saveModuleExplainer(mid, explainer);
-    recordEvent({ type: "module_started", moduleId: mid, data: { title: mod.title } });
+    recordEvent({ type: "module_started", moduleId: mid, data: { title: mod.title }, studentId: course.studentId });
 
     // Certification mode: the required quiz + assignment are part of the content.
     if (course.mode === "certification") {

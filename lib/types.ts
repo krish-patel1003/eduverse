@@ -356,6 +356,102 @@ export interface Assignment {
 /** What the in-module assistant can be asked to do. */
 export type InteractionType = "doubt" | "quiz" | "explain" | "assignment";
 
+// ---- Adaptive Tutor: typed assessments -------------------------------------
+
+/** Subject family, which decides the mix of assessment item types. */
+export type AssessmentDomain = "coding" | "language" | "math" | "general";
+
+/** The kinds of question/task an assessment can contain. */
+export type AssessmentItemType =
+  | "mcq"            // single-select multiple choice (auto-graded)
+  | "multi_mcq"      // select-all-that-apply (auto-graded)
+  | "fill_blank"     // fill in the blanks (auto-graded)
+  | "short_answer"   // one or two sentences (AI-graded)
+  | "code_bugfix"    // find + fix a bug in given code (AI-graded)
+  | "code_write"     // write code to a spec, leetcode style (AI-graded)
+  | "pseudocode"     // outline an algorithm in pseudocode (AI-graded)
+  | "essay"          // longer writing task (AI-graded)
+  | "math_multistep"; // multi-step problem, graded on approach + steps (AI-graded)
+
+/** One assessment item. Auto-graded types carry `correct`; open types carry a hidden `rubric`. */
+export interface AssessmentItem {
+  id: string;
+  type: AssessmentItemType;
+  /** Which aspect of the topic this item probes. */
+  aspect: string;
+  /** The question or task shown to the learner. */
+  prompt: string;
+  /** MCQ options (mcq / multi_mcq). */
+  options?: QuizOption[];
+  /** Correct option id(s) for MCQ; expected fills (in order) for fill_blank. */
+  correct?: string[];
+  /** Programming language for code items. */
+  language?: string;
+  /** Buggy or starter code for code items. */
+  starterCode?: string;
+  /** What a correct answer must demonstrate (open items; used by the grader, hidden from the learner). */
+  rubric?: string;
+}
+
+export interface Assessment {
+  id: string;
+  topic: string;
+  domain: AssessmentDomain;
+  level?: string;
+  /** The aspects covered, in order. */
+  aspects: string[];
+  items: AssessmentItem[];
+}
+
+/** Per-item grade after submission. */
+export interface AssessmentItemGrade {
+  itemId: string;
+  correct: boolean;
+  /** 0..100. */
+  score: number;
+  feedback: string;
+}
+
+/** The graded outcome of an assessment attempt. */
+export interface AssessmentResult {
+  perItem: AssessmentItemGrade[];
+  perAspect: { aspect: string; score: number }[];
+  /** 0..100 overall. */
+  overall: number;
+  passed: boolean;
+  /** Aspects that fell below the mastery bar. */
+  weakAspects: string[];
+  summary: string;
+}
+
+/** A diagnosed weak area the recursive tutor can work on. */
+export interface WeakArea {
+  id: string;
+  topic: string;
+  aspect: string;
+  domain: AssessmentDomain;
+  level?: string;
+  /** 0..1 rolling mastery. */
+  mastery: number;
+  status: "weak" | "learning" | "mastered";
+  updatedAt: number;
+}
+
+/** A completed diagnostic: level-calibrated map of understanding. */
+export interface Diagnostic {
+  id: string;
+  topic: string;
+  level?: string;
+  domain: AssessmentDomain;
+  perAspect: { aspect: string; score: number }[];
+  /** 0..100 overall. */
+  overall: number;
+  /** A human label for where they stand, e.g. "Beginner"/"Proficient". */
+  rank: string;
+  status: "open" | "graded";
+  createdAt: number;
+}
+
 /** A single practice-history / mistake record. */
 export interface LearningEvent {
   id: string;
@@ -381,6 +477,10 @@ export interface StudentProfile {
   id: string;
   /** Display name, used on certificates. */
   name?: string;
+  age?: number;
+  gender?: string;
+  /** Education level, drives level-calibrated diagnostics. */
+  educationLevel?: string;
   motivation?: string;
   goals: string[];
   learningStyle: LearningStyle;

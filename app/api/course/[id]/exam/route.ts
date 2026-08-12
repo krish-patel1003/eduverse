@@ -27,8 +27,12 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
     const moduleNarrations = course.modules.map((m) =>
       (m.explainer?.scenes ?? []).map((s) => s.narration).filter(Boolean).join(" ")
     );
-    const quizzes = await generateExam({ courseTitle: course.title, moduleNarrations, hint: learnerHint() });
-    return NextResponse.json({ quizzes, certificate: getCertificateForCourse(id) });
+    const quizzes = await generateExam({
+      courseTitle: course.title,
+      moduleNarrations,
+      hint: learnerHint(course.studentId),
+    });
+    return NextResponse.json({ quizzes, certificate: getCertificateForCourse(id, course.studentId) });
   } catch (err) {
     console.error("exam GET error", err);
     return NextResponse.json({ error: err instanceof Error ? err.message : "Exam failed" }, { status: 500 });
@@ -51,16 +55,18 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     const score = total ? Math.round((correct / total) * 100) : 0;
     const passed = score >= PASS_PCT;
 
-    recordEvent({ type: "exam", data: { courseId: id, score, passed }, isCorrect: passed });
+    recordEvent({ type: "exam", data: { courseId: id, score, passed }, isCorrect: passed, studentId: course.studentId });
 
     let certificate = null;
     if (passed) {
-      const learnerName = (typeof body?.name === "string" && body.name.trim()) || getStudentName() || "Learner";
+      const learnerName =
+        (typeof body?.name === "string" && body.name.trim()) || getStudentName(course.studentId) || "Learner";
       certificate = issueCertificate({
         courseId: id,
         courseTitle: course.title,
         learnerName: learnerName.slice(0, 80),
         score,
+        studentId: course.studentId,
       });
     }
     return NextResponse.json({ passed, score, correct, total, certificate });

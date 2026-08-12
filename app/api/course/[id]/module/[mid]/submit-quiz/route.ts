@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getModule, setModuleQuizPassed } from "@/lib/store";
+import { getCourse, getModule, setModuleQuizPassed } from "@/lib/store";
 import { applyQuizResult, recordEvent } from "@/lib/profile";
 
 export const runtime = "nodejs";
@@ -25,17 +25,19 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       : [];
     if (items.length === 0) return NextResponse.json({ error: "No answers submitted." }, { status: 400 });
 
+    const studentId = getCourse(id)?.studentId;
     const correct = items.filter((i: { isCorrect: boolean }) => i.isCorrect).length;
     const pct = correct / items.length;
     const passed = pct >= PASS_PCT;
 
-    applyQuizResult(items, mid);
+    applyQuizResult(items, mid, studentId);
     if (passed) setModuleQuizPassed(mid, true);
     recordEvent({
       type: "req_quiz",
       moduleId: mid,
       isCorrect: passed,
       data: { total: items.length, correct, pct: Math.round(pct * 100), passed },
+      studentId,
     });
 
     return NextResponse.json({ passed, score: Math.round(pct * 100), correct, total: items.length });
