@@ -91,7 +91,12 @@ function fullPrompt(style: ArtStyle, subject: string): string {
   );
 }
 
+// On serverless (read-only FS) we inline images as data URLs instead of writing
+// files. Locally we still cache to public/generated for a leaner DB.
+const INLINE_ASSETS = process.env.INLINE_ASSETS === "1";
+
 async function persist(img: Img, key: string): Promise<string> {
+  if (INLINE_ASSETS) return `data:${img.mime};base64,${img.data}`;
   await mkdir(OUT_DIR, { recursive: true });
   const hash = createHash("sha256").update(key).digest("hex").slice(0, 16);
   const file = `${hash}.${extFor(img.mime)}`;
