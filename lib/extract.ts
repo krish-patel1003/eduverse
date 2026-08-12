@@ -46,7 +46,14 @@ const MAX_TEXT = 30000;
 const MIN_FIG_PX = 90; // ignore icons / rules / artifacts
 const MAX_FIGURES = 8;
 
+// On serverless (read-only FS) inline figures as data URLs instead of files.
+const INLINE_ASSETS = process.env.INLINE_ASSETS === "1";
+
 async function persist(buf: Buffer, key: string, ext: string): Promise<string> {
+  if (INLINE_ASSETS) {
+    const mime = ext === "png" ? "image/png" : ext === "jpg" || ext === "jpeg" ? "image/jpeg" : "application/octet-stream";
+    return `data:${mime};base64,${buf.toString("base64")}`;
+  }
   await mkdir(OUT_DIR, { recursive: true });
   const hash = createHash("sha256").update(key).digest("hex").slice(0, 16);
   const file = `fig_${hash}.${ext}`;
@@ -56,6 +63,8 @@ async function persist(buf: Buffer, key: string, ext: string): Promise<string> {
 
 // Persist the original upload so citations can open it (PDF viewers honor #page=N).
 async function persistUpload(buf: Buffer, name: string): Promise<string | undefined> {
+  // Serverless: no writable public dir, so citations just won't be clickable.
+  if (INLINE_ASSETS) return undefined;
   try {
     await mkdir(UP_DIR, { recursive: true });
     const ext = (name.split(".").pop() || "bin").toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 5) || "bin";

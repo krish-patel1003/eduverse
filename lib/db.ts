@@ -12,7 +12,9 @@ import Database from "better-sqlite3";
 import { mkdirSync } from "fs";
 import path from "path";
 
-const DB_DIR = path.join(process.cwd(), "data");
+// DATA_DIR lets the deploy point the DB at a writable path (e.g. /tmp on Cloud
+// Run, where Litestream replicates it to GCS). Defaults to ./data locally.
+const DB_DIR = process.env.DATA_DIR || path.join(process.cwd(), "data");
 const DB_PATH = path.join(DB_DIR, "eduverse.db");
 
 export const DEFAULT_STUDENT = "me";

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import AppNav from "@/components/AppNav";
 import AssessmentRunner, { type PublicItem } from "@/components/AssessmentRunner";
+import ReportView from "@/components/ReportView";
 
 const EDUCATION = [
   "Primary school (grades 1-5)",
@@ -191,37 +192,6 @@ export default function OnboardingPage() {
           </>
         )}
         {error && step !== "info" && step !== "topic" && <div className="err">{error}</div>}
-      </div>
-    </div>
-  );
-}
-
-export function ReportView({ report }: { report: { overall: number; rank: string; perAspect: { aspect: string; score: number }[]; weakAspects: string[]; summary: string } }) {
-  return (
-    <div className="report">
-      <div className="report-top">
-        <div className="report-ring" style={{ ["--p" as string]: report.overall }}>
-          <span className="rr-num">{report.overall}%</span>
-          <span className="rr-rank">{report.rank}</span>
-        </div>
-        <div className="report-summary">
-          <p>{report.summary}</p>
-          {report.weakAspects.length > 0 && (
-            <p className="muted">Focus areas: {report.weakAspects.join(", ")}</p>
-          )}
-        </div>
-      </div>
-      <div className="report-aspects">
-        {report.perAspect.sort((a, b) => a.score - b.score).map((a) => {
-          const cls = a.score >= 70 ? "good" : a.score >= 40 ? "mid" : "bad";
-          return (
-            <div key={a.aspect} className="ra-row">
-              <span className="ra-name">{a.aspect}</span>
-              <span className="ra-bar"><span className={cls} style={{ width: `${a.score}%` }} /></span>
-              <span className="ra-score">{a.score}%</span>
-            </div>
-          );
-        })}
       </div>
     </div>
   );

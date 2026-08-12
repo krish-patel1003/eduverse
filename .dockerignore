@@ -1,0 +1,15 @@
+node_modules
+.next
+.git
+.gitignore
+data
+public/generated
+public/uploads
+test_source
+.env
+.env.local
+.env.local.example
+npm-debug.log*
+*.md
+.DS_Store
+.claude
