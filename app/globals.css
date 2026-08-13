@@ -1009,3 +1009,14 @@ body {
 .rh-tag { font-size: 10.5px; text-transform: uppercase; letter-spacing: .03em; color: #fbbf24; background: rgba(251,191,36,.15); padding: 1px 7px; border-radius: 999px; }
 .rh-score { color: var(--muted); font-variant-numeric: tabular-nums; width: 84px; text-align: right; }
 .ghost-btn.sm { padding: 5px 10px; font-size: 12.5px; }
+/* ---- hi-fi whiteboard: drawn build-up keyframes ---- */
+.kf-wrap { position: absolute; inset: 0; }
+.kf-img {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  object-fit: contain;
+  background: #fdfdfa;
+}
+/* The top frame is the same canvas plus new ink; sweeping its mask reveals only
+   those new strokes, which reads as the drawing being made. */
+.kf-top { will-change: mask-image, -webkit-mask-image; }

@@ -6,6 +6,7 @@ import type {
   Connector,
   Entrance,
   Explainer,
+  Fidelity,
   GroundedPart,
   Quiz,
   QuizOption,
@@ -17,6 +18,7 @@ import type {
 import { CANVAS_H, CANVAS_W } from "./types";
 import { synthesizeScenes } from "./tts";
 import { generateObjectImages, generateSceneImage, usingImages } from "./imagegen";
+import { renderHiFiScenes, usingHiFi } from "./drawscene";
 import { groundParts } from "./grounding";
 import { fixSceneLayout } from "./layout";
 import type { Figure, Source } from "./extract";
@@ -474,7 +476,8 @@ async function buildExplainer(
   style: Style,
   createdFrom: string,
   figures?: Figure[],
-  sources?: Source[]
+  sources?: Source[],
+  fidelity: Fidelity = "fast"
 ): Promise<Explainer> {
   if (authored.length === 0) throw new Error("Author produced no usable scenes");
 
@@ -503,9 +506,17 @@ async function buildExplainer(
   }
   const toGenerate = allObjects.filter((o) => !o.imageUrl);
 
+  // Hi-fi draws each scene as a chain of edit passes (real build-up keyframes)
+  // and needs no object images or part grounding; the drawing carries its own
+  // labels. Fast mode keeps the original single-image + entrance pipeline.
+  const hifi = fidelity === "hifi" && usingHiFi;
   await Promise.all([
-    usingImages ? generateObjectImages(toGenerate, artStyle) : Promise.resolve(),
-    renderStrategyA(scenes, artStyle),
+    hifi
+      ? renderHiFiScenes(scenes)
+      : Promise.all([
+          usingImages ? generateObjectImages(toGenerate, artStyle) : Promise.resolve(),
+          renderStrategyA(scenes, artStyle),
+        ]),
     attachNarration(scenes),
   ]);
 
@@ -536,6 +547,8 @@ export async function generateExplainer(input: {
   prior?: { history?: string[]; lastTitle?: string; lastSummary?: string };
   /** Adaptive block (from the student profile) appended to the author prompt. */
   learnerBlock?: string;
+  /** "hifi" draws each scene as build-up keyframes (slower, higher fidelity). */
+  fidelity?: Fidelity;
 }): Promise<Explainer> {
   // Stage 1 — AUTHOR: write the explanation + teaching script (+ quizzes when
   // interactive) as text, before any visuals are considered.
@@ -579,7 +592,8 @@ export async function generateExplainer(input: {
     input.style,
     input.prompt,
     input.figures,
-    input.sources
+    input.sources,
+    input.fidelity ?? "fast"
   );
 }
 

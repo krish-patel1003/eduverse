@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateExplainer } from "@/lib/gemini";
 import { extractFiles } from "@/lib/extract";
-import type { Style } from "@/lib/types";
+import type { Fidelity, Style } from "@/lib/types";
 
 export const runtime = "nodejs";
-export const maxDuration = 300;
+export const maxDuration = 3600;
 
 export async function POST(req: NextRequest) {
   try {
@@ -13,6 +13,8 @@ export async function POST(req: NextRequest) {
     const style = (String(form.get("style") ?? "linear") as Style) === "interactive"
       ? "interactive"
       : "linear";
+    // "hifi" draws every scene as build-up keyframes: much slower, much richer.
+    const fidelity: Fidelity = String(form.get("fidelity") ?? "fast") === "hifi" ? "hifi" : "fast";
     const files = form.getAll("files").filter((f): f is File => f instanceof File);
 
     if (!prompt && files.length === 0) {
@@ -49,6 +51,7 @@ export async function POST(req: NextRequest) {
       figures,
       sources,
       prior,
+      fidelity,
     });
 
     return NextResponse.json({ explainer, skipped });
