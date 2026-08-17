@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import ExplainerPlayer, { type PlayerHandle } from "@/components/ExplainerPlayer";
 import AppNav from "@/components/AppNav";
-import type { Chat, Explainer, Note, Style } from "@/lib/types";
+import type { Chat, Explainer, Fidelity, Note, Style } from "@/lib/types";
 
 const ACCEPT = ".pdf,.docx,.xlsx,.xls,.csv,.txt,.md,image/*,application/pdf";
 
@@ -35,6 +35,7 @@ export default function ChatPage() {
 
   const [input, setInput] = useState("");
   const [style, setStyle] = useState<Style>("linear");
+  const [fidelity, setFidelity] = useState<Fidelity>("fast");
   const [files, setFiles] = useState<File[]>([]);
   const [loadingChatId, setLoadingChatId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -127,6 +128,7 @@ export default function ChatPage() {
       const fd = new FormData();
       fd.set("prompt", prompt);
       fd.set("style", style);
+      fd.set("fidelity", fidelity);
       // Conversation memory: give the planner the recent thread + the explainer
       // on screen, so follow-ups ("simpler", "add examples", "the earlier one")
       // resolve in context instead of inventing a new topic.
@@ -371,7 +373,9 @@ export default function ChatPage() {
                   <div className="render-card">
                     <div className="render-title">✎ Drawing your explainer…</div>
                     <div className="render-sub">
-                      Generating the illustrations and narration — this takes about a minute.
+                      {fidelity === "hifi"
+                        ? "Drawing every scene stroke by stroke, layer by layer. This takes several minutes."
+                        : "Generating the illustrations and narration, this takes about a minute."}
                     </div>
                     <div className="render-bar">
                       <span />
@@ -417,6 +421,15 @@ export default function ChatPage() {
                 <button className="icon-btn" onClick={() => fileInputRef.current?.click()} title="Attach">
                   📎
                 </button>
+                <select
+                  value={fidelity}
+                  onChange={(e) => setFidelity(e.target.value as Fidelity)}
+                  className="style-select"
+                  title="Hand-drawn draws every scene stroke by stroke. Much slower."
+                >
+                  <option value="fast">Standard</option>
+                  <option value="hifi">Hand-drawn (slow)</option>
+                </select>
                 <select value={style} onChange={(e) => setStyle(e.target.value as Style)} className="style-select">
                   <option value="linear">Linear</option>
                   <option value="interactive">Interactive</option>

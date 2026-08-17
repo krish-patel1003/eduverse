@@ -192,6 +192,12 @@ function migrate(db: Database.Database): void {
   addCol("students", "age", "age INTEGER");
   addCol("students", "gender", "gender TEXT");
   addCol("students", "education_level", "education_level TEXT");
+  // Spaced repetition on weak areas: mastery fades, so mastered skills come back
+  // for a short review before they are forgotten.
+  addCol("weak_areas", "interval_days", "interval_days REAL NOT NULL DEFAULT 0");
+  addCol("weak_areas", "ease", "ease REAL NOT NULL DEFAULT 2.3");
+  addCol("weak_areas", "due_at", "due_at INTEGER");
+  addCol("weak_areas", "reviews", "reviews INTEGER NOT NULL DEFAULT 0");
 
   // Ensure the single implicit student exists.
   db.prepare(

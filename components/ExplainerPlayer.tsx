@@ -342,6 +342,48 @@ function SceneView({ scene, progress }: { scene: Scene; progress: number }) {
 
 // ---- Strategy A: coherent image + beat-synced spotlight reveal -------------
 
+/**
+ * Hi-fi scene: an ordered stack of build-up frames of the SAME canvas, each the
+ * previous plus one drawn layer. We show frame N and reveal frame N+1 over it
+ * with a soft top-to-bottom sweep. Because the two frames are identical except
+ * for the new ink, only the NEW strokes appear, exactly as if they were being
+ * drawn on. Each layer draws, then holds, before the next begins.
+ */
+function SceneKeyframes({ scene, progress }: { scene: Scene; progress: number }) {
+  const frames = scene.keyframes ?? [];
+  if (frames.length === 0) return null;
+  if (frames.length === 1) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img className="kf-img" src={frames[0]} alt="" />;
+  }
+
+  const steps = frames.length - 1;
+  const seg = Math.max(0, Math.min(steps, progress * steps));
+  const i = Math.min(steps - 1, Math.floor(seg));
+  const t = seg - i;
+  // Draw over the first 72% of each step, then hold so the eye can catch up.
+  const drawT = Math.max(0, Math.min(1, t / 0.72));
+  // Leading edge sweeps past both ends so strokes at the very top/bottom land.
+  const edge = drawT * 118 - 9;
+
+  return (
+    <div className="kf-wrap">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img className="kf-img" src={frames[i]} alt="" />
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        className="kf-img kf-top"
+        src={frames[i + 1]}
+        alt=""
+        style={{
+          WebkitMaskImage: `linear-gradient(to bottom, #000 ${edge - 7}%, rgba(0,0,0,0) ${edge + 7}%)`,
+          maskImage: `linear-gradient(to bottom, #000 ${edge - 7}%, rgba(0,0,0,0) ${edge + 7}%)`,
+        }}
+      />
+    </div>
+  );
+}
+
 function SceneA({ scene, beatIdx }: { scene: Scene; beatIdx: number }) {
   const beats = scene.beats ?? [];
   const parts = scene.parts ?? [];
@@ -1215,6 +1257,8 @@ const ExplainerPlayer = forwardRef<PlayerHandle, Props>(function ExplainerPlayer
     return sceneBeats.length - 1;
   })();
   const isSceneA = !!scene && scene.strategy === "A" && !!scene.sceneImageUrl;
+  // Hi-fi scenes carry their own drawn build-up frames and take over the stage.
+  const isKeyframes = !!scene && (scene.keyframes?.length ?? 0) > 0;
   const clipLo = Math.min(clipStart, clipEnd);
   const clipHi = Math.max(clipStart, clipEnd);
   const pct = (ms: number) => `${total ? (ms / total) * 100 : 0}%`;
@@ -1223,7 +1267,9 @@ const ExplainerPlayer = forwardRef<PlayerHandle, Props>(function ExplainerPlayer
     <div className={`player ${isFullscreen ? "is-fullscreen" : ""}`} ref={rootRef}>
       <audio ref={audioRef} hidden />
       <div className="stage">
-        {isSceneA ? (
+        {isKeyframes ? (
+          <SceneKeyframes key={scene!.id} scene={scene!} progress={sceneProgress} />
+        ) : isSceneA ? (
           <SceneA key={scene!.id} scene={scene!} beatIdx={activeBeat} />
         ) : scene && scene.objects && scene.objects.length > 0 ? (
           <ObjectScene key={scene.id} scene={scene} progress={sceneProgress} />

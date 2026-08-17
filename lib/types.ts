@@ -4,6 +4,15 @@
 
 export type Style = "linear" | "interactive";
 
+/**
+ * Rendering fidelity.
+ * - "fast": one generated illustration per scene, animated with entrances (default).
+ * - "hifi": the scene is DRAWN as ordered edit-passes on one evolving canvas
+ *   (title -> outline -> parts -> fills -> labels), giving genuine
+ *   hand-drawn build-up keyframes. Much slower and pricier.
+ */
+export type Fidelity = "fast" | "hifi";
+
 /** A single drawable primitive. The player animates these "drawing themselves". */
 export type Element =
   | { kind: "text"; x: number; y: number; text: string; size?: number; weight?: "normal" | "bold" }
@@ -107,6 +116,12 @@ export interface Scene {
   imagePrompt?: string;
   /** URL of the generated coherent scene image. */
   sceneImageUrl?: string;
+  /**
+   * Hi-fi mode: ordered build-up frames of the SAME registered canvas, each one
+   * the previous plus one drawn layer. The player reveals frame N+1 over frame N
+   * with a sweeping mask, which reads as the new ink being drawn on.
+   */
+  keyframes?: string[];
   /** Grounded named regions in that image. */
   parts?: GroundedPart[];
   /** Beat timeline (narration ↔ visual moves). */
@@ -222,6 +237,13 @@ export interface LearningStyle {
   artStyle?: ArtStyle;
   /** Free-form preferences the learner explicitly asked for (e.g. "use football analogies"). */
   notes?: string[];
+  /**
+   * Teaching mode that has actually produced mastery for this learner (recorded
+   * when a lesson lands), so later lessons lead with what demonstrably works.
+   */
+  bestMode?: string;
+  /** How many times each mode has produced mastery. */
+  modeWins?: Record<string, number>;
 }
 
 /** A compact, prompt-ready description of the learner, injected into generation. */
@@ -461,6 +483,14 @@ export interface WeakArea {
   /** 0..1 rolling mastery. */
   mastery: number;
   status: "weak" | "learning" | "mastered";
+  /** Spaced repetition: days until the next review. */
+  intervalDays?: number;
+  /** Spaced repetition ease factor (how fast the interval grows). */
+  ease?: number;
+  /** When this skill should be reviewed again. */
+  dueAt?: number;
+  /** How many successful reviews so far. */
+  reviews?: number;
   updatedAt: number;
 }
 
