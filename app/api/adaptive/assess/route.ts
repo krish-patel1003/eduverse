@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateAssessment, gradeAssessment } from "@/lib/assessment";
 import { currentUserId, currentStudentId } from "@/lib/auth";
-import { recordEvent, upsertConcept } from "@/lib/profile";
+import { getLearningStyle, recordEvent, updateLearningStyle, upsertConcept } from "@/lib/profile";
 import {
   getWeakArea,
   getAdaptiveSession,
   getRoundAssessment,
   getSessionAssessment,
   saveSessionAssessment,
+  scheduleReview,
   setWeakAreaMastery,
   updateAdaptiveSession,
 } from "@/lib/adaptive";
@@ -110,7 +111,19 @@ export async function POST(req: NextRequest) {
     // Mastery: passing the thorough check counts as mastered; otherwise record progress.
     const mastery = result.passed ? Math.max(0.85, result.overall / 100) : result.overall / 100;
     setWeakAreaMastery(session.weakAreaId, mastery);
+    // Schedule the next review so mastery does not silently decay.
+    scheduleReview(session.weakAreaId, result.passed);
     upsertConcept(`${session.topic}: ${session.aspect}`, result.passed ? 0.3 : result.overall / 100 - 0.4, studentId);
+
+    // "What works": when a lesson actually lands, remember HOW it was taught so
+    // future lessons for this learner lead with that mode.
+    if (result.passed && last?.mode) {
+      const style = getLearningStyle(studentId);
+      const wins = { ...(style.modeWins ?? {}) };
+      wins[last.mode] = (wins[last.mode] ?? 0) + 1;
+      const best = Object.entries(wins).sort((a, b) => b[1] - a[1])[0]?.[0];
+      updateLearningStyle({ modeWins: wins, bestMode: best }, studentId);
+    }
 
     const roundsUsed = rounds.length;
     const capped = !result.passed && roundsUsed >= MAX_ROUNDS;

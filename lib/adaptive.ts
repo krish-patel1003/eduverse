@@ -2,6 +2,7 @@
 // recursive teach->assess session records. Thin typed mapping over lib/db.ts.
 
 import { db, newId, now, parseJson, DEFAULT_STUDENT } from "./db";
+import type { TeachingMode } from "./pedagogy";
 import type {
   AnswerEvidence,
   Assessment,
@@ -24,6 +25,10 @@ interface WeakRow {
   level: string | null;
   mastery: number;
   status: string;
+  interval_days: number | null;
+  ease: number | null;
+  due_at: number | null;
+  reviews: number | null;
   updated_at: number;
 }
 
@@ -36,6 +41,10 @@ function mapWeak(r: WeakRow): WeakArea {
     level: r.level ?? undefined,
     mastery: r.mastery,
     status: r.status as WeakArea["status"],
+    intervalDays: r.interval_days ?? 0,
+    ease: r.ease ?? 2.3,
+    dueAt: r.due_at ?? undefined,
+    reviews: r.reviews ?? 0,
     updatedAt: r.updated_at,
   };
 }
@@ -90,6 +99,61 @@ export function setWeakAreaMastery(id: string, mastery: number): WeakArea | null
   const status = m >= MASTERED ? "mastered" : m > 0.3 ? "learning" : "weak";
   db().prepare(`UPDATE weak_areas SET mastery=?, status=?, updated_at=? WHERE id=?`).run(m, status, now(), id);
   return getWeakArea(id);
+}
+
+// ---- spaced repetition ------------------------------------------------------
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Schedule the next review after an attempt, SM-2 style. A pass grows the
+ * interval by the ease factor; a miss resets it to tomorrow and makes the skill
+ * a little harder in future. Mastery is never "forever": a mastered skill comes
+ * back for a short check before it fades.
+ */
+export function scheduleReview(id: string, passed: boolean): WeakArea | null {
+  const w = getWeakArea(id);
+  if (!w) return null;
+  const ease = w.ease ?? 2.3;
+  const prev = w.intervalDays ?? 0;
+  let nextEase = ease;
+  let nextInterval: number;
+  let reviews = w.reviews ?? 0;
+  if (passed) {
+    reviews += 1;
+    nextEase = Math.min(2.8, ease + 0.1);
+    nextInterval = prev <= 0 ? 1 : prev < 3 ? 3 : Math.round(prev * nextEase);
+  } else {
+    nextEase = Math.max(1.4, ease - 0.25);
+    nextInterval = 1;
+  }
+  const dueAt = now() + nextInterval * DAY_MS;
+  db()
+    .prepare(`UPDATE weak_areas SET interval_days=?, ease=?, due_at=?, reviews=?, updated_at=? WHERE id=?`)
+    .run(nextInterval, nextEase, dueAt, reviews, now(), id);
+  return getWeakArea(id);
+}
+
+/** Mastered skills whose review has come due. */
+export function listDueReviews(studentId = DEFAULT_STUDENT): WeakArea[] {
+  const rows = db()
+    .prepare(
+      `SELECT * FROM weak_areas WHERE student_id = ? AND status = 'mastered' AND due_at IS NOT NULL AND due_at <= ?
+       ORDER BY due_at ASC`
+    )
+    .all(studentId, now()) as WeakRow[];
+  return rows.map(mapWeak);
+}
+
+/**
+ * The single next best thing to work on: an overdue review first (protecting
+ * what was already learned), otherwise the weakest skill still to be learned.
+ */
+export function nextBestAction(studentId = DEFAULT_STUDENT): { kind: "review" | "learn"; area: WeakArea } | null {
+  const due = listDueReviews(studentId);
+  if (due.length) return { kind: "review", area: due[0] };
+  const rest = listWeakAreas(studentId).filter((w) => w.status !== "mastered");
+  return rest.length ? { kind: "learn", area: rest[0] } : null;
 }
 
 // ---- diagnostics -----------------------------------------------------------
@@ -170,6 +234,8 @@ export interface AdaptiveRound {
   droppedDown?: boolean;
   /** Learner-facing reason we chose this skill. */
   reason?: string;
+  /** How this round was taught, so a retry can change the delivery. */
+  mode?: TeachingMode;
   overall?: number;
   passed?: boolean;
   weakAspects?: string[];

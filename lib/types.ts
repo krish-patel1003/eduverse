@@ -237,6 +237,13 @@ export interface LearningStyle {
   artStyle?: ArtStyle;
   /** Free-form preferences the learner explicitly asked for (e.g. "use football analogies"). */
   notes?: string[];
+  /**
+   * Teaching mode that has actually produced mastery for this learner (recorded
+   * when a lesson lands), so later lessons lead with what demonstrably works.
+   */
+  bestMode?: string;
+  /** How many times each mode has produced mastery. */
+  modeWins?: Record<string, number>;
 }
 
 /** A compact, prompt-ready description of the learner, injected into generation. */
@@ -476,6 +483,14 @@ export interface WeakArea {
   /** 0..1 rolling mastery. */
   mastery: number;
   status: "weak" | "learning" | "mastered";
+  /** Spaced repetition: days until the next review. */
+  intervalDays?: number;
+  /** Spaced repetition ease factor (how fast the interval grows). */
+  ease?: number;
+  /** When this skill should be reviewed again. */
+  dueAt?: number;
+  /** How many successful reviews so far. */
+  reviews?: number;
   updatedAt: number;
 }
 

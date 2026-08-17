@@ -510,15 +510,26 @@ async function buildExplainer(
   // and needs no object images or part grounding; the drawing carries its own
   // labels. Fast mode keeps the original single-image + entrance pipeline.
   const hifi = fidelity === "hifi" && usingHiFi;
-  await Promise.all([
-    hifi
-      ? renderHiFiScenes(scenes)
-      : Promise.all([
-          usingImages ? generateObjectImages(toGenerate, artStyle) : Promise.resolve(),
-          renderStrategyA(scenes, artStyle),
-        ]),
-    attachNarration(scenes),
-  ]);
+  const fastVisuals = () =>
+    Promise.all([
+      usingImages ? generateObjectImages(toGenerate, artStyle) : Promise.resolve(),
+      renderStrategyA(scenes, artStyle),
+    ]);
+  // Hi-fi is long-running and image-heavy. If it fails for any reason, fall back
+  // to the standard renderer so the learner still gets a usable lesson.
+  const visuals = hifi
+    ? renderHiFiScenes(scenes)
+        .then(() => {
+          const drew = scenes.some((s) => (s.keyframes?.length ?? 0) > 0);
+          if (!drew) throw new Error("hi-fi produced no frames");
+        })
+        .catch(async (e) => {
+          console.error("hi-fi render failed, falling back to standard:", e);
+          await fastVisuals();
+        })
+    : fastVisuals();
+
+  await Promise.all([visuals, attachNarration(scenes)]);
 
   const quizzes = style === "interactive" ? normalizeQuizzes(quizRaw, scenes.length) : [];
 

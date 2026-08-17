@@ -21,12 +21,14 @@ const HIFI_MODEL = process.env.GEMINI_HIFI_IMAGE_MODEL ?? "gemini-3-pro-image";
 export const usingHiFi = Boolean(apiKey) && process.env.ENABLE_HIFI !== "false";
 
 // Keep a lid on cost/latency: passes per scene and how many scenes render at once.
-const MAX_SCENES = Number(process.env.HIFI_MAX_SCENES ?? 6);
-const SCENE_CONCURRENCY = Number(process.env.HIFI_CONCURRENCY ?? 3);
+const MAX_SCENES = Number(process.env.HIFI_MAX_SCENES ?? 5);
+const SCENE_CONCURRENCY = Number(process.env.HIFI_CONCURRENCY ?? 2);
 // Displayed at ~1024 wide at most; compress hard because every frame is stored
 // inline in the explainer JSON.
-const FRAME_WIDTH = 900;
-const FRAME_QUALITY = 80;
+const FRAME_WIDTH = 720;
+const FRAME_QUALITY = 74;
+// A single pass must not hang the whole request.
+const PASS_TIMEOUT_MS = 120_000;
 
 // Locked look, repeated on every pass so the hand never drifts.
 const STYLE =
@@ -123,9 +125,12 @@ async function editPass(prompt: string, inputs: Img[]): Promise<Img | null> {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${HIFI_MODEL}:generateContent`;
   const parts: unknown[] = inputs.map((i) => ({ inlineData: { mimeType: i.mime, data: i.data } }));
   parts.push({ text: prompt });
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), PASS_TIMEOUT_MS);
   try {
     const res = await fetch(url, {
       method: "POST",
+      signal: ctrl.signal,
       headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
       body: JSON.stringify({
         contents: [{ role: "user", parts }],
@@ -145,6 +150,8 @@ async function editPass(prompt: string, inputs: Img[]): Promise<Img | null> {
   } catch (err) {
     console.error("hifi pass failed:", err);
     return null;
+  } finally {
+    clearTimeout(timer);
   }
 }
 

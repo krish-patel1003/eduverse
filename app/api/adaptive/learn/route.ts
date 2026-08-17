@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateExplainer } from "@/lib/gemini";
-import { hintToPrompt, learnerHint, recordEvent } from "@/lib/profile";
+import { getLearningStyle, hintToPrompt, learnerHint, recordEvent } from "@/lib/profile";
 import { currentUserId, currentStudentId } from "@/lib/auth";
 import { buildPrereqLadder, diagnoseNextSkill } from "@/lib/diagnose";
-import { US_PEDAGOGY } from "@/lib/pedagogy";
+import { US_PEDAGOGY, modeToPrompt, pickTeachingMode, type TeachingMode } from "@/lib/pedagogy";
 import {
   getWeakArea,
   activeSessionForWeakArea,
@@ -63,6 +63,7 @@ export async function POST(req: NextRequest) {
         teachSkill: last?.taughtSkill ?? weak.aspect,
         droppedDown: last?.droppedDown ?? false,
         reason: last?.reason ?? "",
+        mode: last?.mode,
         ...meta,
       });
     }
@@ -105,6 +106,16 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    // ---- decide HOW to teach it ---------------------------------------------
+    // A retry must not just reword the same delivery. Change the teaching mode,
+    // preferring whatever has actually produced mastery for this learner before.
+    const style = getLearningStyle(studentId);
+    const mode = pickTeachingMode({
+      alreadyTried: session.rounds.map((r) => r.mode).filter((m): m is TeachingMode => !!m),
+      preferred: style.bestMode as TeachingMode | undefined,
+      round: roundNum,
+    });
+
     // ---- build the lesson prompt from the diagnosis + real mistakes ----------
     const wrongExamples = evidence
       .filter((e) => !e.correct)
@@ -123,6 +134,7 @@ export async function POST(req: NextRequest) {
         ? `The learner currently believes these wrong things, so confront each one directly and show why it is wrong: ${diagnosis.misconceptions.join("; ")}.\n`
         : "") +
       (wrongExamples ? `Here is exactly what they got wrong last time:\n${wrongExamples}\n` : "") +
+      `${modeToPrompt(mode)}\n` +
       `Make sure they can actually apply the skill, not just recall it.`;
 
     const explainer = await generateExplainer({
@@ -141,13 +153,14 @@ export async function POST(req: NextRequest) {
         taughtSkill: diagnosis.teachSkill,
         droppedDown: diagnosis.droppedDown,
         reason: diagnosis.reason,
+        mode,
         at: Date.now(),
       },
     ];
     updateAdaptiveSession(session.id, { status: "teaching", rounds });
     recordEvent({
       type: "adaptive_taught",
-      data: { topic: weak.topic, aspect: weak.aspect, skill: diagnosis.teachSkill, droppedDown: diagnosis.droppedDown, round: roundNum },
+      data: { topic: weak.topic, aspect: weak.aspect, skill: diagnosis.teachSkill, droppedDown: diagnosis.droppedDown, mode, round: roundNum },
       studentId,
     });
 
@@ -158,6 +171,7 @@ export async function POST(req: NextRequest) {
       teachSkill: diagnosis.teachSkill,
       droppedDown: diagnosis.droppedDown,
       reason: diagnosis.reason,
+      mode,
       ...meta,
     });
   } catch (err) {

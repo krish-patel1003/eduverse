@@ -1020,3 +1020,12 @@ body {
 /* The top frame is the same canvas plus new ink; sweeping its mask reveals only
    those new strokes, which reads as the drawing being made. */
 .kf-top { will-change: mask-image, -webkit-mask-image; }
+
+/* ---- adaptive: next best action + due reviews ---- */
+.next-action { display: flex; align-items: center; gap: 16px; padding: 16px 18px; margin-bottom: 18px; border-radius: 14px; border: 1px solid var(--accent); background: linear-gradient(120deg, rgba(110,168,254,.14), rgba(139,124,246,.06)); }
+.na-text { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.na-kind { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--accent); font-weight: 700; }
+.na-text b { font-size: 16px; }
+.next-action .send { flex: 0 0 auto; text-decoration: none; }
+.wa-card.due { border-color: rgba(251,191,36,.45); }
+.wa-badge.due { color: #fbbf24; background: rgba(251,191,36,.15); }

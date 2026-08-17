@@ -10,6 +10,8 @@ interface Data {
   profile: { name?: string; educationLevel?: string; age?: number };
   diagnostics: Diagnostic[];
   weakAreas: WeakArea[];
+  dueReviews?: WeakArea[];
+  nextAction?: { kind: "review" | "learn"; area: WeakArea } | null;
 }
 
 export default function AdaptiveDashboard() {
@@ -85,6 +87,44 @@ export default function AdaptiveDashboard() {
             <div className="cb-text"><b>Build your profile</b><span>Answer a few questions and take a diagnostic.</span></div>
             <button className="send" onClick={() => router.push("/onboarding")}>Start ▸</button>
           </div>
+        )}
+
+        {/* One clear next step, so the learner never has to plan their own study. */}
+        {data.nextAction && (
+          <div className="next-action">
+            <div className="na-text">
+              <span className="na-kind">{data.nextAction.kind === "review" ? "Due for review" : "Up next"}</span>
+              <b>{data.nextAction.area.aspect}</b>
+              <span className="muted">
+                {data.nextAction.kind === "review"
+                  ? "You learned this. A quick check keeps it from fading."
+                  : `${data.nextAction.area.topic} · weakest area right now`}
+              </span>
+            </div>
+            <Link className="send big" href={`/adaptive/${data.nextAction.area.id}`}>
+              {data.nextAction.kind === "review" ? "Review it ▸" : "Start learning ▸"}
+            </Link>
+          </div>
+        )}
+
+        {(data.dueReviews?.length ?? 0) > 0 && (
+          <section className="hub-section">
+            <h2>Due for review ({data.dueReviews!.length})</h2>
+            <div className="wa-grid">
+              {data.dueReviews!.map((w) => (
+                <div key={w.id} className="wa-card mastered due">
+                  <div className="wa-top">
+                    <span className="wa-aspect">{w.aspect}</span>
+                    <span className="wa-badge due">review</span>
+                  </div>
+                  <div className="wa-foot">
+                    <span className="wa-pct">{w.reviews ?? 0} review{(w.reviews ?? 0) === 1 ? "" : "s"} done</span>
+                    <Link className="send" href={`/adaptive/${w.id}`}>Review ▸</Link>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
         )}
 
         <div className="adaptive-actions">
