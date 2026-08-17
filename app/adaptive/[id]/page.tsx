@@ -9,6 +9,16 @@ import type { Explainer } from "@/lib/types";
 
 type Phase = "loading" | "learning" | "assessLoading" | "assessing" | "verdict";
 
+interface RoundInfo {
+  round: number;
+  taughtSkill?: string;
+  droppedDown?: boolean;
+  reason?: string;
+  overall?: number;
+  passed?: boolean;
+  at: number;
+}
+
 interface Verdict {
   passed: boolean;
   capped: boolean;
@@ -28,6 +38,14 @@ export default function AdaptiveLoopPage({ params }: { params: Promise<{ id: str
   const [explainer, setExplainer] = useState<Explainer | null>(null);
   const [meta, setMeta] = useState<{ topic: string; aspect: string }>({ topic: "", aspect: "" });
   const [round, setRound] = useState(1);
+  // What the tutor decided to teach this round, and why (it may have dropped to
+  // a prerequisite below the aspect the learner picked).
+  const [teachSkill, setTeachSkill] = useState("");
+  const [droppedDown, setDroppedDown] = useState(false);
+  const [reason, setReason] = useState("");
+  const [rounds, setRounds] = useState<RoundInfo[]>([]);
+  const [sessionId2, setSessionId2] = useState("");
+  const [retryOf, setRetryOf] = useState<number | null>(null);
   const [items, setItems] = useState<PublicItem[]>([]);
   const [verdict, setVerdict] = useState<Verdict | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -53,6 +71,10 @@ export default function AdaptiveLoopPage({ params }: { params: Promise<{ id: str
         setExplainer(data.explainer);
         setMeta({ topic: data.topic, aspect: data.aspect });
         setRound(data.round || 1);
+        setTeachSkill(data.teachSkill || data.aspect || "");
+        setDroppedDown(!!data.droppedDown);
+        setReason(data.reason || "");
+        loadHistory(data.sessionId);
         setPhase("learning");
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed");
@@ -61,6 +83,59 @@ export default function AdaptiveLoopPage({ params }: { params: Promise<{ id: str
     },
     [id]
   );
+
+  // Past rounds, so the learner can rewatch a lesson or retry that attempt.
+  const loadHistory = useCallback(async (sid: string) => {
+    if (!sid) return;
+    setSessionId2(sid);
+    try {
+      const res = await fetch(`/api/adaptive/learn?sessionId=${sid}`);
+      const data = await res.json();
+      setRounds((data.session?.rounds ?? []) as RoundInfo[]);
+    } catch {
+      /* history is a nicety */
+    }
+  }, []);
+
+  // Replay the lesson from an earlier round.
+  async function rewatch(r: number) {
+    if (!sessionId2) return;
+    setPhase("loading");
+    setVerdict(null);
+    try {
+      const res = await fetch(`/api/adaptive/learn?sessionId=${sessionId2}&round=${r}`);
+      const data = await res.json();
+      if (!data.explainer) throw new Error("That lesson is no longer available.");
+      setExplainer(data.explainer);
+      const info = (data.session?.rounds ?? []).find((x: RoundInfo) => x.round === r);
+      setTeachSkill(info?.taughtSkill || meta.aspect);
+      setDroppedDown(!!info?.droppedDown);
+      setReason(info?.reason || "");
+      setRound(r);
+      setPhase("learning");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed");
+      setPhase("learning");
+    }
+  }
+
+  // Retake the exact assessment from an earlier round.
+  async function retry(r: number) {
+    if (!sessionId2) return;
+    setPhase("assessLoading");
+    setError(null);
+    try {
+      const res = await fetch(`/api/adaptive/assess?sessionId=${sessionId2}&round=${r}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error ?? "Could not load that attempt");
+      setItems(data.items);
+      setRetryOf(r);
+      setPhase("assessing");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed");
+      setPhase("learning");
+    }
+  }
 
   useEffect(() => {
     teach(false);
@@ -88,12 +163,14 @@ export default function AdaptiveLoopPage({ params }: { params: Promise<{ id: str
       const res = await fetch("/api/adaptive/assess", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId, answers }),
+        body: JSON.stringify({ sessionId: sessionId || sessionId2, answers, retryOf }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error ?? "Grading failed");
       setVerdict(data);
+      setRetryOf(null);
       setPhase("verdict");
+      loadHistory(sessionId || sessionId2);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed");
       setPhase("assessing");
@@ -105,9 +182,27 @@ export default function AdaptiveLoopPage({ params }: { params: Promise<{ id: str
       <AppNav />
       <div className="page">
         <header className="page-head">
-          <h1>{meta.aspect || "Learning"}</h1>
-          <p>{meta.topic}{round > 1 ? ` · attempt ${round}` : ""}</p>
+          <h1>{teachSkill || meta.aspect || "Learning"}</h1>
+          <p>
+            {meta.topic}
+            {teachSkill && meta.aspect && teachSkill.toLowerCase() !== meta.aspect.toLowerCase()
+              ? ` · working toward ${meta.aspect}`
+              : ""}
+            {round > 1 ? ` · attempt ${round}` : ""}
+          </p>
         </header>
+
+        {/* When the tutor drops to a prerequisite, say so plainly so going back
+            a step reads as deliberate teaching, not a downgrade. */}
+        {droppedDown && phase === "learning" && (
+          <div className="cert-banner exam step-back">
+            <span className="cb-badge">🪜</span>
+            <div className="cb-text">
+              <b>Let&apos;s build the foundation first</b>
+              <span>{reason || `Before ${meta.aspect}, we need ${teachSkill} to be solid.`}</span>
+            </div>
+          </div>
+        )}
 
         {phase === "loading" && (
           <div className="render-card standalone">
@@ -124,6 +219,33 @@ export default function AdaptiveLoopPage({ params }: { params: Promise<{ id: str
               <span className="muted">Watch the lesson, then check your understanding.</span>
               <button className="send big" onClick={startAssessment}>I&apos;m ready, assess me ▸</button>
             </div>
+
+            {rounds.length > 1 && (
+              <div className="round-history">
+                <h3>Your attempts</h3>
+                {rounds.map((r) => (
+                  <div key={r.round} className={`rh-row ${r.round === round ? "current" : ""}`}>
+                    <span className="rh-num">#{r.round}</span>
+                    <span className="rh-skill">
+                      {r.taughtSkill || meta.aspect}
+                      {r.droppedDown && <span className="rh-tag">foundation</span>}
+                    </span>
+                    <span className="rh-score">
+                      {typeof r.overall === "number" ? `${r.overall}%` : "not assessed"}
+                    </span>
+                    <button className="ghost-btn sm" onClick={() => rewatch(r.round)}>Rewatch</button>
+                    <button
+                      className="ghost-btn sm"
+                      onClick={() => retry(r.round)}
+                      disabled={typeof r.overall !== "number"}
+                      title={typeof r.overall === "number" ? "Retake this exact assessment" : "No assessment taken yet"}
+                    >
+                      Retry test
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </>
         )}
 

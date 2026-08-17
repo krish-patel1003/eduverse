@@ -6,7 +6,9 @@
 
 import { callGemini } from "./gemini";
 import { newId } from "./db";
+import { US_PEDAGOGY } from "./pedagogy";
 import type {
+  AnswerEvidence,
   Assessment,
   AssessmentDomain,
   AssessmentItem,
@@ -60,6 +62,8 @@ function spec(mode: "diagnostic" | "thorough"): string {
   return `You are an expert assessment designer. ${shape}
 
 CALIBRATE DIFFICULTY AND SCOPE TO THE LEARNER'S EDUCATION LEVEL. A 5th grader's "Mathematics" means 5th-grade arithmetic and fractions; a university student's "Mathematics" means calculus, proofs, linear algebra, etc. Never assess above or below the stated level. ${VOICE}
+
+${US_PEDAGOGY}
 
 First classify the topic's DOMAIN as one of: coding, language, math, general.
 Then pick item types to match the domain.
@@ -153,12 +157,50 @@ function sameSet(a: string[], b: string[]) {
   return a.length === b.length && a.every((x) => b.includes(x));
 }
 
+/** Render what the learner actually submitted, in readable form. */
+function answerText(item: AssessmentItem, ans: unknown): string {
+  if (ans == null) return "";
+  if (item.type === "mcq" || item.type === "multi_mcq") {
+    const picked = Array.isArray(ans) ? (ans as unknown[]).map(String) : [String(ans)];
+    return picked
+      .map((id) => item.options?.find((o) => o.id === id)?.text ?? id)
+      .join("; ");
+  }
+  if (Array.isArray(ans)) return (ans as unknown[]).map(String).join(" | ");
+  return String(ans);
+}
+
+/** Render the expected answer for auto-graded items. */
+function expectedText(item: AssessmentItem): string {
+  if (item.type === "mcq" || item.type === "multi_mcq") {
+    return (item.correct ?? [])
+      .map((id) => item.options?.find((o) => o.id === id)?.text ?? id)
+      .join("; ");
+  }
+  if (item.type === "fill_blank") return (item.correct ?? []).join(" | ");
+  return "";
+}
+
 const GRADE_SPEC = `You are a fair, rigorous grader. For each open item you are given the task, a hidden rubric, and the learner's answer. Grade how well the answer meets the rubric. ${VOICE}
 
 For code: judge correctness and whether it would work, not style. For math_multistep: reward a correct APPROACH and correct steps; do not fail an answer for a tiny arithmetic slip if the method is right. For essays/short answers: judge substance against the rubric, not length.
 
 Output ONLY this JSON:
 { "grades": [ { "id": string, "ok": bool, "score": number(0-100), "feedback": string } ] }  // one per item, same ids`;
+
+// Naming the underlying error is what makes remediation intelligent: "wrong on
+// multi_digit_addition" tells us nothing, "adds each column independently and
+// never carries" tells us exactly what to reteach, and how far to drop.
+const DIAGNOSE_SPEC = `You are a diagnostic teacher looking at questions a learner got WRONG. For each one, work out the UNDERLYING misconception, not a restatement that they were wrong. ${VOICE}
+
+Think about what belief or missing skill would produce exactly that answer.
+- Good: "adds each column separately and never carries the ten", "treats the denominator like a whole number", "reverses cause and effect".
+- Bad: "did not know the answer", "made a mistake", "needs more practice".
+
+Also name the single PREREQUISITE SKILL the learner is missing, phrased as something teachable (e.g. "regrouping ones into tens", "single digit addition facts to 10").
+
+Output ONLY this JSON:
+{ "diagnoses": [ { "id": string, "misconception": string, "missingSkill": string } ] }`;
 
 export async function gradeAssessment(input: {
   assessment: Assessment;
@@ -219,7 +261,33 @@ export async function gradeAssessment(input: {
     }
   }
 
-  // 3. Aggregate per aspect + overall.
+  // 3. Diagnose every WRONG item: name the misconception behind the answer.
+  //    This is the signal the remediation loop reasons over, so it covers
+  //    auto-graded items too (an MCQ distractor is often the clearest tell).
+  const byIdEarly = new Map(perItem.map((p) => [p.itemId, p]));
+  const wrong = assessment.items.filter((it) => byIdEarly.get(it.id) && !byIdEarly.get(it.id)!.correct);
+  if (wrong.length) {
+    const payload = wrong
+      .map((it) => {
+        const given = answerText(it, answers[it.id]);
+        return `id: ${it.id}\nSkill area: ${it.aspect}\nQuestion: ${it.prompt}\nLearner answered: ${given || "(blank)"}\nCorrect answer: ${expectedText(it) || "(see rubric) " + (it.rubric ?? "")}`;
+      })
+      .join("\n\n---\n\n");
+    try {
+      const raw = (await callGemini(DIAGNOSE_SPEC, [{ text: payload }])) as Record<string, unknown>;
+      const list = Array.isArray(raw.diagnoses) ? raw.diagnoses : [];
+      for (const it of wrong) {
+        const d = (list.find((x) => (x as { id?: string })?.id === it.id) ?? {}) as Record<string, unknown>;
+        const g = byIdEarly.get(it.id)!;
+        if (typeof d.misconception === "string") g.misconception = stripDashes(d.misconception.trim()).slice(0, 240);
+        if (typeof d.missingSkill === "string") g.missingSkill = stripDashes(d.missingSkill.trim()).slice(0, 120);
+      }
+    } catch {
+      /* diagnosis is best-effort; grading still stands */
+    }
+  }
+
+  // 4. Aggregate per aspect + overall.
   const byId = new Map(perItem.map((p) => [p.itemId, p]));
   const aspectScores = new Map<string, number[]>();
   for (const item of assessment.items) {
@@ -236,12 +304,30 @@ export async function gradeAssessment(input: {
   const weakAspects = perAspect.filter((a) => a.score < PASS_PCT).map((a) => a.aspect);
   const passed = overall >= PASS_PCT && weakAspects.length === 0;
 
+  // Full per-item record, so the next round can see WHAT went wrong, not just
+  // which tag failed.
+  const evidence: AnswerEvidence[] = assessment.items.map((it) => {
+    const g = byId.get(it.id);
+    return {
+      aspect: it.aspect,
+      type: it.type,
+      question: it.prompt,
+      learnerAnswer: answerText(it, answers[it.id]),
+      expected: expectedText(it) || undefined,
+      correct: g?.correct ?? false,
+      score: g?.score ?? 0,
+      misconception: g?.misconception,
+      missingSkill: g?.missingSkill,
+    };
+  });
+
   return {
     perItem,
     perAspect,
     overall,
     passed,
     weakAspects,
+    evidence,
     summary: passed
       ? "Strong understanding across every aspect."
       : `Needs work on: ${weakAspects.join(", ") || "some aspects"}.`,

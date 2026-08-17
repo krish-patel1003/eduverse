@@ -996,3 +996,16 @@ body {
 .vf-item { font-size: 13.5px; color: var(--muted); padding: 7px 10px; background: var(--panel-2); border-radius: 8px; margin-bottom: 6px; }
 .verdict-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .verdict-actions .send, .verdict-actions .ghost-btn { text-decoration: none; }
+
+/* ---- adaptive: step-back banner + attempt history ---- */
+.cert-banner.step-back { border-color: #fbbf24; background: linear-gradient(120deg, rgba(251,191,36,.14), rgba(110,168,254,.06)); }
+.round-history { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; margin-top: 4px; }
+.round-history h3 { margin: 0 0 10px; font-size: 14px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.rh-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13.5px; }
+.rh-row:last-child { border-bottom: none; }
+.rh-row.current { color: var(--text); }
+.rh-num { width: 28px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.rh-skill { flex: 1; display: flex; align-items: center; gap: 8px; min-width: 0; }
+.rh-tag { font-size: 10.5px; text-transform: uppercase; letter-spacing: .03em; color: #fbbf24; background: rgba(251,191,36,.15); padding: 1px 7px; border-radius: 999px; }
+.rh-score { color: var(--muted); font-variant-numeric: tabular-nums; width: 84px; text-align: right; }
+.ghost-btn.sm { padding: 5px 10px; font-size: 12.5px; }

@@ -410,11 +410,38 @@ export interface AssessmentItemGrade {
   /** 0..100. */
   score: number;
   feedback: string;
+  /**
+   * The UNDERLYING error, named (e.g. "adds digits without regrouping",
+   * "ignores place value"). This is what remediation reasons over: knowing the
+   * misconception is what lets us drop to the right prerequisite instead of
+   * repeating the same lesson.
+   */
+  misconception?: string;
+  /** What a correct answer needs that the learner did not show. */
+  missingSkill?: string;
+}
+
+/**
+ * A full record of one answered item, kept so later rounds can see WHAT the
+ * learner actually got wrong rather than only which aspect tag failed.
+ */
+export interface AnswerEvidence {
+  aspect: string;
+  type: AssessmentItemType;
+  question: string;
+  learnerAnswer: string;
+  expected?: string;
+  correct: boolean;
+  score: number;
+  misconception?: string;
+  missingSkill?: string;
 }
 
 /** The graded outcome of an assessment attempt. */
 export interface AssessmentResult {
   perItem: AssessmentItemGrade[];
+  /** Full per-item record (question, answer, verdict, misconception). */
+  evidence?: AnswerEvidence[];
   perAspect: { aspect: string; score: number }[];
   /** 0..100 overall. */
   overall: number;
@@ -435,6 +462,45 @@ export interface WeakArea {
   mastery: number;
   status: "weak" | "learning" | "mastered";
   updatedAt: number;
+}
+
+/**
+ * A prerequisite ladder for one skill: what a learner must already be able to do
+ * before the target skill makes sense, ordered EASIEST first. Grounded in US
+ * grade-level scope and sequence.
+ */
+export interface PrereqStep {
+  /** Short skill name, e.g. "single digit addition to 10". */
+  skill: string;
+  /** US grade band where this is normally taught, e.g. "Grade 1". */
+  grade?: string;
+  /** How to check the learner has it, in one line. */
+  check: string;
+}
+
+export interface PrereqLadder {
+  /** The skill the learner is trying to reach. */
+  target: string;
+  /** Easiest first, ending just below the target. */
+  steps: PrereqStep[];
+}
+
+/**
+ * The result of reasoning over a failed attempt: WHY they failed and WHAT to
+ * teach next. `teachSkill` may sit well below the original aspect, which is the
+ * whole point of the adaptive loop.
+ */
+export interface Diagnosis {
+  /** The skill to teach in the next round (possibly a prerequisite). */
+  teachSkill: string;
+  /** True when we dropped below the original aspect to fix a foundation. */
+  droppedDown: boolean;
+  /** Named misconceptions seen in the evidence. */
+  misconceptions: string[];
+  /** Plain-language reason, shown to the learner so the drop feels intentional. */
+  reason: string;
+  /** How to pitch the lesson: what to assume and what to build from. */
+  teachingNotes: string;
 }
 
 /** A completed diagnostic: level-calibrated map of understanding. */
