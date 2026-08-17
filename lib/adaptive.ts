@@ -3,6 +3,7 @@
 
 import { db, newId, now, parseJson, DEFAULT_STUDENT } from "./db";
 import type {
+  AnswerEvidence,
   Assessment,
   AssessmentDomain,
   AssessmentResult,
@@ -163,9 +164,19 @@ export interface AdaptiveRound {
   round: number;
   explainerId?: string;
   taughtAspects: string[];
+  /** The exact skill taught this round (may be a prerequisite below the aspect). */
+  taughtSkill?: string;
+  /** True when this round dropped to a foundation below the original aspect. */
+  droppedDown?: boolean;
+  /** Learner-facing reason we chose this skill. */
+  reason?: string;
   overall?: number;
   passed?: boolean;
   weakAspects?: string[];
+  /** Full per-item record of the attempt: what was asked, answered, and why it was wrong. */
+  evidence?: AnswerEvidence[];
+  /** Misconceptions named from this attempt. */
+  misconceptions?: string[];
   at: number;
 }
 
@@ -250,30 +261,55 @@ export function updateAdaptiveSession(id: string, patch: { status?: AdaptiveSess
 
 // The teaching explainer for a session's latest round is cached separately so we
 // don't bloat the rounds JSON with base64 audio; keyed by explainer id in a tiny map table reuse: store on events.
-export function saveSessionExplainer(sessionId: string, explainer: Explainer): void {
+// Lessons and assessments are stored per ROUND (module_id = "<sessionId>#<round>")
+// so any past round can be replayed or retried, not just the latest one.
+const roundKey = (sessionId: string, round: number) => `${sessionId}#${round}`;
+
+export function saveSessionExplainer(sessionId: string, explainer: Explainer, round: number): void {
   db()
     .prepare(`INSERT INTO events (id, student_id, module_id, type, data, created_at) VALUES (?, '', ?, 'adaptive_explainer', ?, ?)`)
-    .run(newId("evt"), sessionId, JSON.stringify(explainer), now());
+    .run(newId("evt"), roundKey(sessionId, round), JSON.stringify(explainer), now());
 }
 
-export function getSessionExplainer(sessionId: string): Explainer | null {
+/** The lesson taught in a specific round. */
+export function getRoundExplainer(sessionId: string, round: number): Explainer | null {
   const r = db()
     .prepare(`SELECT data FROM events WHERE module_id = ? AND type = 'adaptive_explainer' ORDER BY created_at DESC LIMIT 1`)
-    .get(sessionId) as { data: string } | undefined;
+    .get(roundKey(sessionId, round)) as { data: string } | undefined;
+  return r ? parseJson<Explainer>(r.data, {} as Explainer) : null;
+}
+
+/** The most recent lesson for a session (any round). */
+export function getSessionExplainer(sessionId: string): Explainer | null {
+  const r = db()
+    .prepare(
+      `SELECT data FROM events WHERE module_id LIKE ? AND type = 'adaptive_explainer' ORDER BY created_at DESC LIMIT 1`
+    )
+    .get(`${sessionId}#%`) as { data: string } | undefined;
   return r ? parseJson<Explainer>(r.data, {} as Explainer) : null;
 }
 
 // The current post-video assessment for a session (with answer keys), stored
 // server-side between GET (generate) and POST (grade).
-export function saveSessionAssessment(sessionId: string, assessment: Assessment): void {
+export function saveSessionAssessment(sessionId: string, assessment: Assessment, round: number): void {
   db()
     .prepare(`INSERT INTO events (id, student_id, module_id, type, data, created_at) VALUES (?, '', ?, 'adaptive_assessment', ?, ?)`)
-    .run(newId("evt"), sessionId, JSON.stringify(assessment), now());
+    .run(newId("evt"), roundKey(sessionId, round), JSON.stringify(assessment), now());
+}
+
+/** The assessment used in a specific round, for retrying it. */
+export function getRoundAssessment(sessionId: string, round: number): Assessment | null {
+  const r = db()
+    .prepare(`SELECT data FROM events WHERE module_id = ? AND type = 'adaptive_assessment' ORDER BY created_at DESC LIMIT 1`)
+    .get(roundKey(sessionId, round)) as { data: string } | undefined;
+  return r ? parseJson<Assessment>(r.data, {} as Assessment) : null;
 }
 
 export function getSessionAssessment(sessionId: string): Assessment | null {
   const r = db()
-    .prepare(`SELECT data FROM events WHERE module_id = ? AND type = 'adaptive_assessment' ORDER BY created_at DESC LIMIT 1`)
-    .get(sessionId) as { data: string } | undefined;
+    .prepare(
+      `SELECT data FROM events WHERE module_id LIKE ? AND type = 'adaptive_assessment' ORDER BY created_at DESC LIMIT 1`
+    )
+    .get(`${sessionId}#%`) as { data: string } | undefined;
   return r ? parseJson<Assessment>(r.data, {} as Assessment) : null;
 }

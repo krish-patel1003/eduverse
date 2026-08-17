@@ -2,25 +2,33 @@ import { NextRequest, NextResponse } from "next/server";
 import { generateExplainer } from "@/lib/gemini";
 import { hintToPrompt, learnerHint, recordEvent } from "@/lib/profile";
 import { currentUserId, currentStudentId } from "@/lib/auth";
+import { buildPrereqLadder, diagnoseNextSkill } from "@/lib/diagnose";
+import { US_PEDAGOGY } from "@/lib/pedagogy";
 import {
   getWeakArea,
   activeSessionForWeakArea,
   createAdaptiveSession,
   getAdaptiveSession,
+  getRoundExplainer,
   getSessionExplainer,
   saveSessionExplainer,
   updateAdaptiveSession,
   type AdaptiveRound,
 } from "@/lib/adaptive";
+import type { Diagnosis } from "@/lib/types";
 
 export const runtime = "nodejs";
-export const maxDuration = 300;
+export const maxDuration = 600;
 
 const MAX_ROUNDS = 4;
 
-// Start (or continue) the recursive teaching loop for a weak area. The SYSTEM
-// decides what to teach, composing the prompt from the aspect + level + the
-// learner's prior mistakes. No user prompt is involved.
+// Start (or continue) the recursive teaching loop for a weak area.
+//
+// The system decides what to teach with no user prompt. Crucially, on a retry it
+// does NOT simply re-teach the same aspect in a different style: it reads the
+// learner's actual wrong answers, builds a prerequisite ladder, and drops to the
+// lowest broken rung. A learner who cannot add single digits gets taught single
+// digit addition, not multi digit addition with a new analogy.
 export async function POST(req: NextRequest) {
   try {
     if (!currentUserId(req)) return NextResponse.json({ error: "Please log in." }, { status: 401 });
@@ -44,10 +52,19 @@ export async function POST(req: NextRequest) {
     }
 
     const meta = { topic: weak.topic, aspect: weak.aspect, domain: weak.domain };
-    // Reuse the existing teaching video unless we're re-teaching after a miss.
+    // Reuse the existing lesson unless we are re-teaching after a miss.
     const existing = getSessionExplainer(session.id);
     if (existing && !force) {
-      return NextResponse.json({ sessionId: session.id, explainer: existing, round: session.rounds.length, ...meta });
+      const last = session.rounds[session.rounds.length - 1];
+      return NextResponse.json({
+        sessionId: session.id,
+        explainer: existing,
+        round: Math.max(1, session.rounds.length),
+        teachSkill: last?.taughtSkill ?? weak.aspect,
+        droppedDown: last?.droppedDown ?? false,
+        reason: last?.reason ?? "",
+        ...meta,
+      });
     }
 
     if (session.rounds.length >= MAX_ROUNDS) {
@@ -58,44 +75,109 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Mistakes gathered from prior rounds sharpen the re-teach.
-    const priorMistakes = session.rounds.flatMap((r) => r.weakAspects ?? []);
     const roundNum = session.rounds.length + 1;
+
+    // ---- decide WHAT to teach -------------------------------------------------
+    // Round 1 teaches the aspect itself. Later rounds diagnose the root cause
+    // from the previous attempt's evidence and may drop below it.
+    let diagnosis: Diagnosis = {
+      teachSkill: weak.aspect,
+      droppedDown: false,
+      misconceptions: [],
+      reason: "",
+      teachingNotes: "",
+    };
+    const lastRound = session.rounds[session.rounds.length - 1];
+    const evidence = lastRound?.evidence ?? [];
+    if (evidence.length) {
+      const ladder = await buildPrereqLadder({
+        skill: lastRound?.taughtSkill || weak.aspect,
+        topic: weak.topic,
+        level: weak.level,
+      });
+      diagnosis = await diagnoseNextSkill({
+        skill: lastRound?.taughtSkill || weak.aspect,
+        topic: weak.topic,
+        level: weak.level,
+        ladder,
+        evidence,
+        alreadyTaught: session.rounds.map((r) => r.taughtSkill).filter((x): x is string => !!x),
+      });
+    }
+
+    // ---- build the lesson prompt from the diagnosis + real mistakes ----------
+    const wrongExamples = evidence
+      .filter((e) => !e.correct)
+      .slice(0, 5)
+      .map((e) => `  - Asked: ${e.question}\n    They answered: ${e.learnerAnswer || "(blank)"}${e.misconception ? `\n    Why it was wrong: ${e.misconception}` : ""}`)
+      .join("\n");
+
     const prompt =
-      `Teach the concept "${weak.aspect}" within "${weak.topic}" to a ${weak.level || "general"} learner who is struggling with it. ` +
-      `Build understanding from the ground up with clear, concrete worked examples. ` +
-      (priorMistakes.length
-        ? `They still get these wrong, so address them head on with a different angle than before: ${[...new Set(priorMistakes)].join(", ")}. `
+      `Teach the skill "${diagnosis.teachSkill}" to a ${weak.level || "general"} learner, as part of understanding "${weak.topic}".\n` +
+      `${US_PEDAGOGY}\n` +
+      (diagnosis.droppedDown
+        ? `IMPORTANT: this learner tried "${lastRound?.taughtSkill || weak.aspect}" and it did not stick, because a FOUNDATION is missing. You are deliberately going back to teach that foundation. Assume NOTHING above this skill. Start from the very beginning of this skill, with concrete, physical examples before any procedure or notation. Do not teach the harder skill again.\n`
+        : `Build the skill from the ground up with clear, concrete worked examples.\n`) +
+      (diagnosis.teachingNotes ? `TEACHING NOTES: ${diagnosis.teachingNotes}\n` : "") +
+      (diagnosis.misconceptions.length
+        ? `The learner currently believes these wrong things, so confront each one directly and show why it is wrong: ${diagnosis.misconceptions.join("; ")}.\n`
         : "") +
-      `Make sure they can actually apply it, not just recall it.`;
+      (wrongExamples ? `Here is exactly what they got wrong last time:\n${wrongExamples}\n` : "") +
+      `Make sure they can actually apply the skill, not just recall it.`;
 
     const explainer = await generateExplainer({
       prompt,
       style: "interactive",
       learnerBlock: hintToPrompt(learnerHint(studentId)),
     });
-    saveSessionExplainer(session.id, explainer);
+    saveSessionExplainer(session.id, explainer, roundNum);
 
     const rounds: AdaptiveRound[] = [
       ...session.rounds,
-      { round: roundNum, explainerId: explainer.id, taughtAspects: [weak.aspect], at: Date.now() },
+      {
+        round: roundNum,
+        explainerId: explainer.id,
+        taughtAspects: [diagnosis.teachSkill],
+        taughtSkill: diagnosis.teachSkill,
+        droppedDown: diagnosis.droppedDown,
+        reason: diagnosis.reason,
+        at: Date.now(),
+      },
     ];
     updateAdaptiveSession(session.id, { status: "teaching", rounds });
-    recordEvent({ type: "adaptive_taught", data: { topic: weak.topic, aspect: weak.aspect, round: roundNum }, studentId });
+    recordEvent({
+      type: "adaptive_taught",
+      data: { topic: weak.topic, aspect: weak.aspect, skill: diagnosis.teachSkill, droppedDown: diagnosis.droppedDown, round: roundNum },
+      studentId,
+    });
 
-    return NextResponse.json({ sessionId: session.id, explainer, round: roundNum, ...meta });
+    return NextResponse.json({
+      sessionId: session.id,
+      explainer,
+      round: roundNum,
+      teachSkill: diagnosis.teachSkill,
+      droppedDown: diagnosis.droppedDown,
+      reason: diagnosis.reason,
+      ...meta,
+    });
   } catch (err) {
     console.error("adaptive learn error", err);
     return NextResponse.json({ error: err instanceof Error ? err.message : "Could not start" }, { status: 500 });
   }
 }
 
-// Fetch the current session state (for resuming the loop page).
+// Session state (for resuming), plus optional replay of a specific past round.
 export async function GET(req: NextRequest) {
   if (!currentUserId(req)) return NextResponse.json({ error: "Please log in." }, { status: 401 });
-  const sessionId = new URL(req.url).searchParams.get("sessionId");
+  const url = new URL(req.url);
+  const sessionId = url.searchParams.get("sessionId");
   if (!sessionId) return NextResponse.json({ error: "Missing sessionId" }, { status: 400 });
   const session = getAdaptiveSession(sessionId);
   if (!session) return NextResponse.json({ error: "Session not found" }, { status: 404 });
-  return NextResponse.json({ session, explainer: getSessionExplainer(sessionId) });
+
+  const roundParam = url.searchParams.get("round");
+  const explainer = roundParam
+    ? getRoundExplainer(sessionId, Number(roundParam))
+    : getSessionExplainer(sessionId);
+  return NextResponse.json({ session, explainer });
 }

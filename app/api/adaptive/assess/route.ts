@@ -3,7 +3,9 @@ import { generateAssessment, gradeAssessment } from "@/lib/assessment";
 import { currentUserId, currentStudentId } from "@/lib/auth";
 import { recordEvent, upsertConcept } from "@/lib/profile";
 import {
+  getWeakArea,
   getAdaptiveSession,
+  getRoundAssessment,
   getSessionAssessment,
   saveSessionAssessment,
   setWeakAreaMastery,
@@ -33,22 +35,36 @@ function publicItem(it: AssessmentItem) {
 export async function GET(req: NextRequest) {
   try {
     if (!currentUserId(req)) return NextResponse.json({ error: "Please log in." }, { status: 401 });
-    const sessionId = new URL(req.url).searchParams.get("sessionId") ?? "";
+    const url = new URL(req.url);
+    const sessionId = url.searchParams.get("sessionId") ?? "";
     const session = getAdaptiveSession(sessionId);
     if (!session) return NextResponse.json({ error: "Session not found" }, { status: 404 });
 
-    const priorMistakes = session.rounds.flatMap((r) => r.weakAspects ?? []);
+    // Retry: replay the exact assessment from a past round instead of a new one.
+    const retryRound = url.searchParams.get("round");
+    if (retryRound) {
+      const past = getRoundAssessment(sessionId, Number(retryRound));
+      if (!past) return NextResponse.json({ error: "That attempt is no longer available." }, { status: 404 });
+      return NextResponse.json({ items: past.items.map(publicItem), domain: past.domain, retryOf: Number(retryRound) });
+    }
+
+    const roundNum = Math.max(1, session.rounds.length);
+    const last = session.rounds[session.rounds.length - 1];
+    // Assess the skill we actually TAUGHT this round, which may be a
+    // prerequisite below the original aspect.
+    const skill = last?.taughtSkill || session.aspect;
+    const priorMistakes = session.rounds.flatMap((r) => r.misconceptions ?? []);
     const assessment = await generateAssessment({
       topic: session.topic,
-      level: undefined,
+      level: getWeakArea(session.weakAreaId)?.level,
       mode: "thorough",
-      aspects: [session.aspect],
+      aspects: [skill],
       priorMistakes: [...new Set(priorMistakes)],
     });
-    saveSessionAssessment(sessionId, assessment);
+    saveSessionAssessment(sessionId, assessment, roundNum);
     updateAdaptiveSession(sessionId, { status: "assessing" });
 
-    return NextResponse.json({ items: assessment.items.map(publicItem), domain: assessment.domain });
+    return NextResponse.json({ items: assessment.items.map(publicItem), domain: assessment.domain, skill });
   } catch (err) {
     console.error("adaptive assess GET error", err);
     return NextResponse.json({ error: err instanceof Error ? err.message : "Assessment failed" }, { status: 500 });
@@ -64,19 +80,31 @@ export async function POST(req: NextRequest) {
     const sessionId = String(body?.sessionId ?? "");
     const answers = (body?.answers ?? {}) as Record<string, unknown>;
 
+    // A retry grades against THAT round's stored questions, not the latest set.
+    const retryOf = Number(body?.retryOf);
     const session = getAdaptiveSession(sessionId);
-    const assessment = getSessionAssessment(sessionId);
+    const assessment = Number.isFinite(retryOf) && retryOf > 0
+      ? getRoundAssessment(sessionId, retryOf)
+      : getSessionAssessment(sessionId);
     if (!session || !assessment) return NextResponse.json({ error: "Session not found" }, { status: 404 });
 
     const result = await gradeAssessment({ assessment, answers });
 
     // Record the outcome on the latest round.
     const rounds = [...session.rounds];
-    const last = rounds[rounds.length - 1];
+    const last =
+      Number.isFinite(retryOf) && retryOf > 0
+        ? rounds.find((r) => r.round === retryOf) ?? rounds[rounds.length - 1]
+        : rounds[rounds.length - 1];
     if (last) {
       last.overall = result.overall;
       last.passed = result.passed;
       last.weakAspects = result.weakAspects;
+      // Keep the full record: this is what the NEXT round diagnoses from.
+      last.evidence = result.evidence ?? [];
+      last.misconceptions = [
+        ...new Set((result.evidence ?? []).map((e) => e.misconception).filter((m): m is string => !!m)),
+      ];
     }
 
     // Mastery: passing the thorough check counts as mastered; otherwise record progress.
