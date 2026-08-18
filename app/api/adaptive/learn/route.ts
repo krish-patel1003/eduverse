@@ -4,6 +4,7 @@ import { getLearningStyle, hintToPrompt, learnerHint, recordEvent } from "@/lib/
 import { currentUserId, currentStudentId } from "@/lib/auth";
 import { buildPrereqLadder, diagnoseNextSkill } from "@/lib/diagnose";
 import { US_PEDAGOGY, modeToPrompt, pickTeachingMode, type TeachingMode } from "@/lib/pedagogy";
+import { feedbackTeachingHint, feedbackWantsModeChange } from "@/lib/feedback";
 import {
   getWeakArea,
   activeSessionForWeakArea,
@@ -110,9 +111,13 @@ export async function POST(req: NextRequest) {
     // A retry must not just reword the same delivery. Change the teaching mode,
     // preferring whatever has actually produced mastery for this learner before.
     const style = getLearningStyle(studentId);
+    const lastFeedback = lastRound?.feedback;
+    // If the learner said the last lesson was confusing / too fast / unhelpful, do
+    // not lead with their usual best mode: let the rotation pick a fresh delivery.
+    const forceModeChange = !!lastFeedback && feedbackWantsModeChange(lastFeedback.reactions);
     const mode = pickTeachingMode({
       alreadyTried: session.rounds.map((r) => r.mode).filter((m): m is TeachingMode => !!m),
-      preferred: style.bestMode as TeachingMode | undefined,
+      preferred: forceModeChange ? undefined : (style.bestMode as TeachingMode | undefined),
       round: roundNum,
     });
 
@@ -134,6 +139,7 @@ export async function POST(req: NextRequest) {
         ? `The learner currently believes these wrong things, so confront each one directly and show why it is wrong: ${diagnosis.misconceptions.join("; ")}.\n`
         : "") +
       (wrongExamples ? `Here is exactly what they got wrong last time:\n${wrongExamples}\n` : "") +
+      (lastFeedback ? `${feedbackTeachingHint(lastFeedback.reactions, lastFeedback.text)}\n` : "") +
       `${modeToPrompt(mode)}\n` +
       `Make sure they can actually apply the skill, not just recall it.`;
 

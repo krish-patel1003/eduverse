@@ -2,6 +2,7 @@
 
 import { use, useCallback, useEffect, useRef, useState } from "react";
 import ExplainerPlayer, { type PlayerHandle } from "@/components/ExplainerPlayer";
+import LessonFeedback from "@/components/LessonFeedback";
 import ModulePanel from "@/components/ModulePanel";
 import CourseQuiz, { type QuizKind } from "@/components/CourseQuiz";
 import AppNav from "@/components/AppNav";
@@ -319,7 +320,10 @@ export default function CoursePage({ params }: { params: Promise<{ id: string }>
                 <div className="render-bar"><span /></div>
               </div>
             ) : displayExplainer ? (
-              <ExplainerPlayer ref={playerRef} explainer={displayExplainer} onReExplain={reExplainFocus} />
+              <>
+                <ExplainerPlayer ref={playerRef} explainer={displayExplainer} onReExplain={reExplainFocus} />
+                <LessonFeedback key={displayExplainer.id} explainerId={displayExplainer.id} context="course" />
+              </>
             ) : genLoading ? (
               <div className="render-card standalone">
                 <div className="render-title">✎ Building this module…</div>

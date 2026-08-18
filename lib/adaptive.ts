@@ -243,6 +243,15 @@ export interface AdaptiveRound {
   evidence?: AnswerEvidence[];
   /** Misconceptions named from this attempt. */
   misconceptions?: string[];
+  /** The learner's end-of-lesson feedback on this round's video. */
+  feedback?: RoundFeedback;
+  at: number;
+}
+
+/** One-tap reactions plus an optional note, captured at the end of a lesson. */
+export interface RoundFeedback {
+  reactions: string[];
+  text?: string;
   at: number;
 }
 
@@ -346,6 +355,14 @@ export function getRoundExplainer(sessionId: string, round: number): Explainer |
 }
 
 /** The most recent lesson for a session (any round). */
+/** Record the learner's end-of-lesson feedback onto a specific round. */
+export function attachRoundFeedback(sessionId: string, round: number, feedback: RoundFeedback): void {
+  const session = getAdaptiveSession(sessionId);
+  if (!session) return;
+  const rounds = session.rounds.map((r) => (r.round === round ? { ...r, feedback } : r));
+  updateAdaptiveSession(sessionId, { rounds });
+}
+
 export function getSessionExplainer(sessionId: string): Explainer | null {
   const r = db()
     .prepare(
