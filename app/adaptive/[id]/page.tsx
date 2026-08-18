@@ -5,6 +5,7 @@ import Link from "next/link";
 import AppNav from "@/components/AppNav";
 import ExplainerPlayer from "@/components/ExplainerPlayer";
 import AssessmentRunner, { type PublicItem } from "@/components/AssessmentRunner";
+import LessonFeedback from "@/components/LessonFeedback";
 import type { Explainer } from "@/lib/types";
 
 type Phase = "loading" | "learning" | "assessLoading" | "assessing" | "verdict";
@@ -215,6 +216,13 @@ export default function AdaptiveLoopPage({ params }: { params: Promise<{ id: str
         {phase === "learning" && explainer && (
           <>
             <div className="player-wrap"><ExplainerPlayer explainer={explainer} /></div>
+            <LessonFeedback
+              key={`${explainer.id}-${round}`}
+              explainerId={explainer.id}
+              sessionId={sessionId}
+              round={round}
+              context="adaptive"
+            />
             <div className="module-foot">
               <span className="muted">Watch the lesson, then check your understanding.</span>
               <button className="send big" onClick={startAssessment}>I&apos;m ready, assess me ▸</button>

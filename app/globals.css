@@ -1029,3 +1029,21 @@ body {
 .next-action .send { flex: 0 0 auto; text-decoration: none; }
 .wa-card.due { border-color: rgba(251,191,36,.45); }
 .wa-badge.due { color: #fbbf24; background: rgba(251,191,36,.15); }
+
+/* ---- end-of-lesson feedback ---- */
+.lf-card { margin-top: 12px; padding: 14px 16px; border: 1px solid var(--border); border-radius: 14px; background: var(--panel); display: flex; flex-direction: column; gap: 10px; }
+.lf-card.done { flex-direction: row; align-items: center; gap: 10px; color: var(--muted); font-size: 14px; }
+.lf-check { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%; background: rgba(52,211,153,.18); color: #34d399; font-weight: 700; }
+.lf-title { font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.lf-reactions { display: flex; flex-wrap: wrap; gap: 8px; }
+.lf-react { display: inline-flex; align-items: center; gap: 7px; padding: 7px 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--bg); color: var(--text); cursor: pointer; font-size: 13.5px; transition: border-color .12s, background .12s, transform .06s; }
+.lf-react:hover { border-color: var(--accent); }
+.lf-react:active { transform: scale(.96); }
+.lf-react.on { border-color: var(--accent); background: linear-gradient(120deg, rgba(110,168,254,.18), rgba(139,124,246,.1)); }
+.lf-emoji { font-size: 16px; line-height: 1; }
+.lf-text { width: 100%; resize: vertical; min-height: 40px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); color: var(--text); padding: 8px 10px; font: inherit; font-size: 13.5px; }
+.lf-text:focus { outline: none; border-color: var(--accent); }
+.lf-foot { display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
+.lf-err { color: #f87171; font-size: 12.5px; margin-right: auto; }
+.lf-send { padding: 8px 16px; border-radius: 10px; border: none; background: var(--accent); color: #04122b; font-weight: 600; cursor: pointer; font-size: 13.5px; }
+.lf-send:disabled { opacity: .5; cursor: not-allowed; }

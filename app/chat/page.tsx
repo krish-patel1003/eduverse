@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import ExplainerPlayer, { type PlayerHandle } from "@/components/ExplainerPlayer";
+import LessonFeedback from "@/components/LessonFeedback";
 import AppNav from "@/components/AppNav";
 import type { Chat, Explainer, Fidelity, Note, Style } from "@/lib/types";
 
@@ -324,6 +325,7 @@ export default function ChatPage() {
                     onTimeUpdate={handleTime}
                     onReExplain={reExplain}
                   />
+                  <LessonFeedback key={current.id} explainerId={current.id} context="chat" />
                 </div>
               )}
             </div>
