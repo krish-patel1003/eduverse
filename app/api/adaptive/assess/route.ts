@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateAssessment, gradeAssessment } from "@/lib/assessment";
 import { currentUserId, currentStudentId } from "@/lib/auth";
-import { getLearningStyle, recordEvent, updateLearningStyle, upsertConcept } from "@/lib/profile";
+import { recordEvent, upsertConcept } from "@/lib/profile";
+import { recordTeachingOutcome } from "@/lib/effectiveness";
 import {
   getWeakArea,
   getAdaptiveSession,
@@ -115,14 +116,18 @@ export async function POST(req: NextRequest) {
     scheduleReview(session.weakAreaId, result.passed);
     upsertConcept(`${session.topic}: ${session.aspect}`, result.passed ? 0.3 : result.overall / 100 - 0.4, studentId);
 
-    // "What works": when a lesson actually lands, remember HOW it was taught so
-    // future lessons for this learner lead with that mode.
-    if (result.passed && last?.mode) {
-      const style = getLearningStyle(studentId);
-      const wins = { ...(style.modeWins ?? {}) };
-      wins[last.mode] = (wins[last.mode] ?? 0) + 1;
-      const best = Object.entries(wins).sort((a, b) => b[1] - a[1])[0]?.[0];
-      updateLearningStyle({ modeWins: wins, bestMode: best }, studentId);
+    // Teaching Effectiveness Profile: record how THIS approach performed on THIS
+    // skill for THIS child. The best approach changes by concept, so it is keyed
+    // by skill rather than stored as one global "learning style".
+    if (last?.mode && last?.method) {
+      recordTeachingOutcome(studentId, session.topic, {
+        skill: last.taughtSkill || session.aspect,
+        mode: last.mode,
+        method: last.method,
+        beforeScore: last.beforeScore,
+        afterScore: result.overall,
+        successful: result.passed,
+      });
     }
 
     const roundsUsed = rounds.length;

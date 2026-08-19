@@ -2,7 +2,7 @@
 // recursive teach->assess session records. Thin typed mapping over lib/db.ts.
 
 import { db, newId, now, parseJson, DEFAULT_STUDENT } from "./db";
-import type { TeachingMode } from "./pedagogy";
+import type { ConcreteMode, TeachingMethod } from "./pedagogy";
 import type {
   AnswerEvidence,
   Assessment,
@@ -234,8 +234,14 @@ export interface AdaptiveRound {
   droppedDown?: boolean;
   /** Learner-facing reason we chose this skill. */
   reason?: string;
-  /** How this round was taught, so a retry can change the delivery. */
-  mode?: TeachingMode;
+  /** The child-facing mode this round was taught in. */
+  mode?: ConcreteMode;
+  /** The instructional method the engine used to deliver that mode. */
+  method?: TeachingMethod;
+  /** Why the engine picked this approach (shown to parents, not the child). */
+  routeReason?: string;
+  /** Score before this round's lesson, for measuring the lesson's effect. */
+  beforeScore?: number;
   overall?: number;
   passed?: boolean;
   weakAspects?: string[];

@@ -237,13 +237,7 @@ export interface LearningStyle {
   artStyle?: ArtStyle;
   /** Free-form preferences the learner explicitly asked for (e.g. "use football analogies"). */
   notes?: string[];
-  /**
-   * Teaching mode that has actually produced mastery for this learner (recorded
-   * when a lesson lands), so later lessons lead with what demonstrably works.
-   */
-  bestMode?: string;
-  /** How many times each mode has produced mastery. */
-  modeWins?: Record<string, number>;
+
 }
 
 /** A compact, prompt-ready description of the learner, injected into generation. */
