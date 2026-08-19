@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import AppNav from "@/components/AppNav";
+import { humanizeSkill } from "@/lib/display";
 import type { Diagnostic, WeakArea } from "@/lib/types";
 
 interface Data {
@@ -12,6 +13,19 @@ interface Data {
   weakAreas: WeakArea[];
   dueReviews?: WeakArea[];
   nextAction?: { kind: "review" | "learn"; area: WeakArea } | null;
+  plan?: PlanItem[];
+  progress?: { xp: number; streak: number };
+}
+
+interface PlanItem {
+  kind: string;
+  minutes: number;
+  emoji: string;
+  title: string;
+  skill: string;
+  weakAreaId: string;
+  mode: string;
+  why: string;
 }
 
 export default function AdaptiveDashboard() {
@@ -73,12 +87,22 @@ export default function AdaptiveDashboard() {
     <div className="shell">
       <AppNav />
       <div className="page">
-        <header className="page-head">
-          <h1>Adaptive Tutor</h1>
-          <p>
-            {data.profile.name ? `${data.profile.name} · ` : ""}
-            {data.profile.educationLevel ?? "Finish your profile to calibrate everything to your level."}
-          </p>
+        <header className="page-head with-progress">
+          <div>
+            <h1>Adaptive Tutor</h1>
+            <p>
+              {data.profile.name ? `${data.profile.name} · ` : ""}
+              {data.profile.educationLevel ?? "Finish your profile to calibrate everything to your level."}
+            </p>
+          </div>
+          {data.progress && (
+            <div className="progress-badges">
+              <span className="pb xp" title="Experience points earned">⭐ {data.progress.xp} XP</span>
+              {data.progress.streak > 0 && (
+                <span className="pb streak" title="Days in a row">🔥 {data.progress.streak}</span>
+              )}
+            </div>
+          )}
         </header>
 
         {noProfile && (
@@ -89,12 +113,36 @@ export default function AdaptiveDashboard() {
           </div>
         )}
 
+        {/* Today's plan: the child should never have to decide what to study. */}
+        {(data.plan?.length ?? 0) > 0 && (
+          <section className="today">
+            <div className="today-head">
+              <h2>Today&apos;s Math</h2>
+              <span className="today-mins">
+                about {data.plan!.reduce((n, p) => n + p.minutes, 0)} min
+              </span>
+            </div>
+            <div className="today-list">
+              {data.plan!.map((p, i) => (
+                <Link key={i} className="today-item" href={`/adaptive/${p.weakAreaId}`}>
+                  <span className="ti-emoji">{p.emoji}</span>
+                  <span className="ti-text">
+                    <b>{p.title}</b>
+                    <small>{humanizeSkill(p.skill)} · {p.why}</small>
+                  </span>
+                  <span className="ti-mins">{p.minutes} min</span>
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
+
         {/* One clear next step, so the learner never has to plan their own study. */}
-        {data.nextAction && (
+        {(data.plan?.length ?? 0) === 0 && data.nextAction && (
           <div className="next-action">
             <div className="na-text">
               <span className="na-kind">{data.nextAction.kind === "review" ? "Due for review" : "Up next"}</span>
-              <b>{data.nextAction.area.aspect}</b>
+              <b>{humanizeSkill(data.nextAction.area.aspect)}</b>
               <span className="muted">
                 {data.nextAction.kind === "review"
                   ? "You learned this. A quick check keeps it from fading."
@@ -114,7 +162,7 @@ export default function AdaptiveDashboard() {
               {data.dueReviews!.map((w) => (
                 <div key={w.id} className="wa-card mastered due">
                   <div className="wa-top">
-                    <span className="wa-aspect">{w.aspect}</span>
+                    <span className="wa-aspect">{humanizeSkill(w.aspect)}</span>
                     <span className="wa-badge due">review</span>
                   </div>
                   <div className="wa-foot">
@@ -152,7 +200,7 @@ export default function AdaptiveDashboard() {
                       return (
                         <div key={w.id} className={`wa-card ${w.status}`}>
                           <div className="wa-top">
-                            <span className="wa-aspect">{w.aspect}</span>
+                            <span className="wa-aspect">{humanizeSkill(w.aspect)}</span>
                             {mastered ? (
                               <span className="wa-badge done">✓ Mastered</span>
                             ) : (

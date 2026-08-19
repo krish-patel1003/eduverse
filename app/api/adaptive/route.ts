@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { currentUserId, currentStudentId } from "@/lib/auth";
 import { getProfile } from "@/lib/profile";
 import { listDiagnostics, listDueReviews, listWeakAreas, nextBestAction } from "@/lib/adaptive";
+import { buildDailyPlan } from "@/lib/plan";
+import { getProgress } from "@/lib/rewards";
 
 export const runtime = "nodejs";
 
@@ -23,6 +25,8 @@ export async function GET(req: NextRequest) {
       weakAreas: listWeakAreas(studentId),
       dueReviews: listDueReviews(studentId),
       nextAction: nextBestAction(studentId),
+      plan: buildDailyPlan(studentId),
+      progress: getProgress(studentId),
     });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "Failed" }, { status: 500 });

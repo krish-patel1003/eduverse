@@ -8,6 +8,7 @@ import AssessmentRunner, { type PublicItem } from "@/components/AssessmentRunner
 import LessonFeedback from "@/components/LessonFeedback";
 import ModePicker from "@/components/ModePicker";
 import { MODE_EMOJI, MODE_LABEL, type TeachingMode } from "@/lib/pedagogy";
+import { humanizeSkill } from "@/lib/display";
 import type { Explainer } from "@/lib/types";
 
 type Phase = "loading" | "learning" | "assessLoading" | "assessing" | "verdict";
@@ -34,6 +35,8 @@ interface Verdict {
   weakAspects: string[];
   summary: string;
   perItem: { itemId: string; correct: boolean; score: number; feedback: string }[];
+  reward?: { xp: number; reason: string; headline: string; message: string; emoji: string; comeback: boolean };
+  progress?: { xp: number; streak: number; streakExtended: boolean };
 }
 
 export default function AdaptiveLoopPage({ params }: { params: Promise<{ id: string }> }) {
@@ -204,11 +207,11 @@ export default function AdaptiveLoopPage({ params }: { params: Promise<{ id: str
       <AppNav />
       <div className="page">
         <header className="page-head">
-          <h1>{teachSkill || meta.aspect || "Learning"}</h1>
+          <h1>{humanizeSkill(teachSkill || meta.aspect) || "Learning"}</h1>
           <p>
             {meta.topic}
             {teachSkill && meta.aspect && teachSkill.toLowerCase() !== meta.aspect.toLowerCase()
-              ? ` · working toward ${meta.aspect}`
+              ? ` · working toward ${humanizeSkill(meta.aspect)}`
               : ""}
             {round > 1 ? ` · attempt ${round}` : ""}
           </p>
@@ -221,7 +224,7 @@ export default function AdaptiveLoopPage({ params }: { params: Promise<{ id: str
             <span className="cb-badge">🪜</span>
             <div className="cb-text">
               <b>Let&apos;s build the foundation first</b>
-              <span>{reason || `Before ${meta.aspect}, we need ${teachSkill} to be solid.`}</span>
+              <span>{reason || `Before ${humanizeSkill(meta.aspect)}, we need ${humanizeSkill(teachSkill)} to be solid.`}</span>
             </div>
           </div>
         )}
@@ -273,7 +276,7 @@ export default function AdaptiveLoopPage({ params }: { params: Promise<{ id: str
                   <div key={r.round} className={`rh-row ${r.round === round ? "current" : ""}`}>
                     <span className="rh-num">#{r.round}</span>
                     <span className="rh-skill">
-                      {r.taughtSkill || meta.aspect}
+                      {humanizeSkill(r.taughtSkill || meta.aspect)}
                       {r.droppedDown && <span className="rh-tag">foundation</span>}
                     </span>
                     <span className="rh-score">
@@ -314,55 +317,105 @@ export default function AdaptiveLoopPage({ params }: { params: Promise<{ id: str
 
         {phase === "verdict" && verdict && (
           <div className={`verdict ${verdict.passed ? "pass" : "fail"}`}>
-            <div className="verdict-head">
-              <span className="verdict-icon">{verdict.passed ? "🎉" : "🔁"}</span>
-              <div>
-                <h2>{verdict.passed ? "Mastered!" : "Not quite yet"}</h2>
-                <p className="muted">
-                  {verdict.passed
-                    ? `You understand ${meta.aspect}. Marked mastered.`
-                    : verdict.summary}
-                </p>
-              </div>
-              <span className="verdict-score">{verdict.overall}%</span>
-            </div>
-
-            <div className="report-aspects">
-              {verdict.perAspect.sort((a, b) => a.score - b.score).map((a) => {
-                const cls = a.score >= 70 ? "good" : a.score >= 40 ? "mid" : "bad";
-                return (
-                  <div key={a.aspect} className="ra-row">
-                    <span className="ra-name">{a.aspect}</span>
-                    <span className="ra-bar"><span className={cls} style={{ width: `${a.score}%` }} /></span>
-                    <span className="ra-score">{a.score}%</span>
-                  </div>
-                );
-              })}
-            </div>
-
-            {!verdict.passed && verdict.perItem.some((p) => p.feedback) && (
-              <div className="verdict-feedback">
-                <h3>Feedback</h3>
-                {verdict.perItem.filter((p) => !p.correct && p.feedback).slice(0, 5).map((p, i) => (
-                  <div key={i} className="vf-item">✗ {p.feedback}</div>
-                ))}
-              </div>
-            )}
-
-            <div className="verdict-actions">
-              {verdict.passed ? (
-                <Link className="send big" href="/adaptive">Back to my tutor ▸</Link>
-              ) : verdict.capped ? (
-                <>
-                  <p className="muted">You&apos;ve had {verdict.roundsUsed} goes at this. Take a short break and come back with fresh eyes.</p>
-                  <Link className="ghost-btn" href="/adaptive">Back to my tutor</Link>
-                </>
-              ) : (
-                <>
-                  <button className="send big" onClick={() => teach(true)}>Teach me again, differently ▸</button>
-                  <Link className="ghost-btn" href="/adaptive">Later</Link>
-                </>
+            {/* Mistakes are information, never a verdict on the child. The
+                headline celebrates effort and progress, not just passing. */}
+            <div className="celebrate">
+              <span className="celebrate-emoji">{verdict.reward?.emoji ?? (verdict.passed ? "🎉" : "💪")}</span>
+              <h2>{verdict.reward?.headline ?? (verdict.passed ? "You got it!" : "Almost!")}</h2>
+              <p className="celebrate-msg">
+                {verdict.reward?.message ??
+                  (verdict.passed
+                    ? `You just mastered ${teachSkill || meta.aspect}.`
+                    : `I found what tripped you up on ${teachSkill || meta.aspect}. Let's fix it together.`)}
+              </p>
+              {verdict.reward && (
+                <div className="xp-row">
+                  <span className="xp-chip">+{verdict.reward.xp} XP ⭐</span>
+                  <span className="xp-reason">{verdict.reward.reason}</span>
+                  {verdict.progress && verdict.progress.streak > 1 && (
+                    <span className="xp-streak">🔥 {verdict.progress.streak}-day streak</span>
+                  )}
+                </div>
               )}
+            </div>
+
+            <details className="verdict-detail">
+              <summary>See how each part went</summary>
+              <div className="report-aspects">
+                {verdict.perAspect.sort((a, b) => a.score - b.score).map((a) => {
+                  const cls = a.score >= 70 ? "good" : a.score >= 40 ? "mid" : "bad";
+                  return (
+                    <div key={a.aspect} className="ra-row">
+                      <span className="ra-name">{humanizeSkill(a.aspect)}</span>
+                      <span className="ra-bar"><span className={cls} style={{ width: `${a.score}%` }} /></span>
+                      <span className="ra-score">{a.score}%</span>
+                    </div>
+                  );
+                })}
+              </div>
+              {verdict.perItem.some((p) => !p.correct && p.feedback) && (
+                <div className="verdict-feedback">
+                  <h3>What tripped you up</h3>
+                  {verdict.perItem.filter((p) => !p.correct && p.feedback).slice(0, 5).map((p, i) => (
+                    <div key={i} className="vf-item">{p.feedback}</div>
+                  ))}
+                </div>
+              )}
+            </details>
+
+            {/* What's next: always give a clear, small, appealing next step. */}
+            <div className="whats-next">
+              <div className="wn-title">What&apos;s next?</div>
+              <div className="wn-cards">
+                {verdict.passed ? (
+                  <>
+                    <Link className="wn-card" href="/adaptive">
+                      <span className="wn-emoji">🔵</span>
+                      <b>Next skill</b>
+                      <small>5 min</small>
+                    </Link>
+                    <button className="wn-card" onClick={() => pickMode("challenge")}>
+                      <span className="wn-emoji">🟣</span>
+                      <b>Fun challenge</b>
+                      <small>3 min</small>
+                    </button>
+                    <button className="wn-card" onClick={() => pickMode("practice")}>
+                      <span className="wn-emoji">🟢</span>
+                      <b>Quick practice</b>
+                      <small>2 min</small>
+                    </button>
+                  </>
+                ) : verdict.capped ? (
+                  <>
+                    <p className="muted wn-rest">
+                      You have worked hard on this today. Fresh eyes tomorrow will make it click.
+                    </p>
+                    <Link className="wn-card" href="/adaptive">
+                      <span className="wn-emoji">🟢</span>
+                      <b>Something else</b>
+                      <small>5 min</small>
+                    </Link>
+                  </>
+                ) : (
+                  <>
+                    <button className="wn-card primary" onClick={() => teach(true)}>
+                      <span className="wn-emoji">✨</span>
+                      <b>Teach me a different way</b>
+                      <small>Recommended</small>
+                    </button>
+                    <button className="wn-card" onClick={() => pickMode("show_me")}>
+                      <span className="wn-emoji">👀</span>
+                      <b>Show me with pictures</b>
+                      <small>4 min</small>
+                    </button>
+                    <Link className="wn-card" href="/adaptive">
+                      <span className="wn-emoji">🌙</span>
+                      <b>Come back later</b>
+                      <small>Save my spot</small>
+                    </Link>
+                  </>
+                )}
+              </div>
             </div>
           </div>
         )}

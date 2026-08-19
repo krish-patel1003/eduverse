@@ -3,6 +3,7 @@ import { generateAssessment, gradeAssessment } from "@/lib/assessment";
 import { currentUserId, currentStudentId } from "@/lib/auth";
 import { recordEvent, upsertConcept } from "@/lib/profile";
 import { recordTeachingOutcome } from "@/lib/effectiveness";
+import { awardXp, rewardFor } from "@/lib/rewards";
 import {
   getWeakArea,
   getAdaptiveSession,
@@ -130,6 +131,20 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    // Encourage: XP + streak, and words that never punish a mistake.
+    const previousBest = rounds
+      .filter((r) => r.round !== last?.round && typeof r.overall === "number")
+      .reduce<number | undefined>((best, r) => (best === undefined ? r.overall : Math.max(best, r.overall!)), undefined);
+    const reward = rewardFor({
+      passed: result.passed,
+      score: result.overall,
+      previousBest,
+      attemptNumber: rounds.length,
+      isReview: (getWeakArea(session.weakAreaId)?.reviews ?? 0) > 0,
+      skill: last?.taughtSkill || session.aspect,
+    });
+    const progress = awardXp(studentId, reward.xp);
+
     const roundsUsed = rounds.length;
     const capped = !result.passed && roundsUsed >= MAX_ROUNDS;
     updateAdaptiveSession(sessionId, {
@@ -154,6 +169,8 @@ export async function POST(req: NextRequest) {
       perItem: result.perItem,
       weakAspects: result.weakAspects,
       summary: result.summary,
+      reward,
+      progress,
     });
   } catch (err) {
     console.error("adaptive assess POST error", err);
