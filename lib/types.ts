@@ -390,6 +390,8 @@ export type AssessmentItemType =
   | "math_multistep"; // multi-step problem, graded on approach + steps (AI-graded)
 
 /** One assessment item. Auto-graded types carry `correct`; open types carry a hidden `rubric`. */
+import type { ItemVisual } from "./visuals";
+
 export interface AssessmentItem {
   id: string;
   type: AssessmentItemType;
@@ -407,6 +409,8 @@ export interface AssessmentItem {
   starterCode?: string;
   /** What a correct answer must demonstrate (open items; used by the grader, hidden from the learner). */
   rubric?: string;
+  /** An exact, deterministically drawn figure shown with the question. */
+  visual?: ItemVisual;
 }
 
 export interface Assessment {

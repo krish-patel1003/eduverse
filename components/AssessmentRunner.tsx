@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import type { AssessmentItemType, QuizOption } from "@/lib/types";
+import type { ItemVisual } from "@/lib/visuals";
+import ItemVisualFigure from "@/components/ItemVisual";
 
 // The client-safe item shape (no answer keys).
 export interface PublicItem {
@@ -13,6 +15,8 @@ export interface PublicItem {
   language?: string;
   starterCode?: string;
   blanks?: number;
+  /** An exact figure drawn with the question (fraction bar, number line, ...). */
+  visual?: ItemVisual;
 }
 
 interface Props {
@@ -79,6 +83,8 @@ export default function AssessmentRunner({ items, onSubmit, submitting, submitLa
                 <span className="ai-aspect">{it.aspect}</span>
               </div>
               <div className="ai-prompt">{it.prompt}</div>
+
+              {it.visual && <ItemVisualFigure visual={it.visual} />}
 
               {it.starterCode && (
                 <pre className="ai-starter"><code>{it.starterCode}</code></pre>

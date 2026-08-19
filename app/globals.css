@@ -1169,3 +1169,10 @@ body {
 .ti-text b { font-size: 14px; }
 .ti-text small { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ti-mins { color: var(--muted); font-size: 12px; flex-shrink: 0; }
+
+/* ---- assessment question figures (deterministic SVG) ---- */
+.item-visual { margin: 12px 0 4px; padding: 14px 16px; border: 1px solid var(--border); border-radius: 12px;
+  background: var(--bg); display: flex; flex-direction: column; align-items: center; gap: 8px; overflow-x: auto; }
+.iv-svg { display: block; width: 100%; max-width: 420px; height: auto; color: var(--text); }
+.iv-svg.small { max-width: 260px; }
+.item-visual figcaption { color: var(--muted); font-size: 12.5px; text-align: center; }

@@ -31,6 +31,7 @@ function publicItem(it: AssessmentItem) {
     language: it.language,
     starterCode: it.starterCode,
     blanks: it.type === "fill_blank" ? (it.correct?.length ?? 1) : undefined,
+    visual: it.visual,
   };
 }
 

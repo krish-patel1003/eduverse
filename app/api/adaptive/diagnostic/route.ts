@@ -20,6 +20,7 @@ function publicItem(it: AssessmentItem) {
     starterCode: it.starterCode,
     // number of blanks (so the UI can render the right inputs) without the answers
     blanks: it.type === "fill_blank" ? (it.correct?.length ?? 1) : undefined,
+    visual: it.visual,
   };
 }
 
