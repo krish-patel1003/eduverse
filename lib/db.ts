@@ -198,6 +198,16 @@ function migrate(db: Database.Database): void {
   addCol("weak_areas", "ease", "ease REAL NOT NULL DEFAULT 2.3");
   addCol("weak_areas", "due_at", "due_at INTEGER");
   addCol("weak_areas", "reviews", "reviews INTEGER NOT NULL DEFAULT 0");
+  // Child profiles: a `students` row is now a learner owned by a user account.
+  // owner_id links a child to its parent/guardian user; the legacy per-user
+  // student row (id == user id) becomes that user's first child.
+  addCol("students", "owner_id", "owner_id TEXT");
+  addCol("students", "avatar", "avatar TEXT");
+  addCol("students", "xp", "xp INTEGER NOT NULL DEFAULT 0");
+  addCol("students", "streak", "streak INTEGER NOT NULL DEFAULT 0");
+  // Backfill: every existing account's self-student becomes its own first child.
+  db.exec(`UPDATE students SET owner_id = id WHERE owner_id IS NULL AND id IN (SELECT id FROM users)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_students_owner ON students (owner_id)`);
 
   // Ensure the single implicit student exists.
   db.prepare(
