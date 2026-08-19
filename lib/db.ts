@@ -222,6 +222,8 @@ function migrate(db: Database.Database): void {
   addCol("students", "avatar", "avatar TEXT");
   addCol("students", "xp", "xp INTEGER NOT NULL DEFAULT 0");
   addCol("students", "streak", "streak INTEGER NOT NULL DEFAULT 0");
+  // Last day the learner did anything, so the streak can be extended or reset.
+  addCol("students", "last_active_at", "last_active_at INTEGER");
   // Backfill: every existing account's self-student becomes its own first child.
   db.exec(`UPDATE students SET owner_id = id WHERE owner_id IS NULL AND id IN (SELECT id FROM users)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_students_owner ON students (owner_id)`);
