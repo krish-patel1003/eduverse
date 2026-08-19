@@ -1,11 +1,13 @@
 "use client";
 
-import { use, useCallback, useEffect, useState } from "react";
+import { use, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import AppNav from "@/components/AppNav";
 import ExplainerPlayer from "@/components/ExplainerPlayer";
 import AssessmentRunner, { type PublicItem } from "@/components/AssessmentRunner";
 import LessonFeedback from "@/components/LessonFeedback";
+import ModePicker from "@/components/ModePicker";
+import { MODE_EMOJI, MODE_LABEL, type TeachingMode } from "@/lib/pedagogy";
 import type { Explainer } from "@/lib/types";
 
 type Phase = "loading" | "learning" | "assessLoading" | "assessing" | "verdict";
@@ -13,6 +15,8 @@ type Phase = "loading" | "learning" | "assessLoading" | "assessing" | "verdict";
 interface RoundInfo {
   round: number;
   taughtSkill?: string;
+  mode?: TeachingMode;
+  method?: string;
   droppedDown?: boolean;
   reason?: string;
   overall?: number;
@@ -45,11 +49,19 @@ export default function AdaptiveLoopPage({ params }: { params: Promise<{ id: str
   const [droppedDown, setDroppedDown] = useState(false);
   const [reason, setReason] = useState("");
   const [rounds, setRounds] = useState<RoundInfo[]>([]);
+  // "Math My Way": the child's requested mode. "auto" lets the engine choose.
+  const [mode, setMode] = useState<TeachingMode>("auto");
+  const [taughtMode, setTaughtMode] = useState<TeachingMode | null>(null);
+  const [routeReason, setRouteReason] = useState("");
   const [sessionId2, setSessionId2] = useState("");
   const [retryOf, setRetryOf] = useState<number | null>(null);
   const [items, setItems] = useState<PublicItem[]>([]);
   const [verdict, setVerdict] = useState<Verdict | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Read the latest picked mode without rebuilding the teach callback.
+  const modeRef = useRef<TeachingMode>("auto");
+  modeRef.current = mode;
 
   const teach = useCallback(
     async (reteach: boolean) => {
@@ -60,7 +72,7 @@ export default function AdaptiveLoopPage({ params }: { params: Promise<{ id: str
         const res = await fetch("/api/adaptive/learn", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ weakAreaId: id, reteach }),
+          body: JSON.stringify({ weakAreaId: id, reteach, mode: modeRef.current }),
         });
         const data = await res.json();
         if (res.status === 401) {
@@ -75,6 +87,8 @@ export default function AdaptiveLoopPage({ params }: { params: Promise<{ id: str
         setTeachSkill(data.teachSkill || data.aspect || "");
         setDroppedDown(!!data.droppedDown);
         setReason(data.reason || "");
+        setTaughtMode((data.mode as TeachingMode) ?? null);
+        setRouteReason(data.routeReason || "");
         loadHistory(data.sessionId);
         setPhase("learning");
       } catch (err) {
@@ -136,6 +150,13 @@ export default function AdaptiveLoopPage({ params }: { params: Promise<{ id: str
       setError(err instanceof Error ? err.message : "Failed");
       setPhase("learning");
     }
+  }
+
+  // Picking a different kind of help re-teaches the same skill that way.
+  function pickMode(next: TeachingMode) {
+    setMode(next);
+    modeRef.current = next;
+    teach(true);
   }
 
   useEffect(() => {
@@ -215,7 +236,24 @@ export default function AdaptiveLoopPage({ params }: { params: Promise<{ id: str
 
         {phase === "learning" && explainer && (
           <>
+            {/* What the engine actually chose, in the child's own words. */}
+            {taughtMode && (
+              <div className="mp-chosen">
+                <span className="mp-emoji">{MODE_EMOJI[taughtMode]}</span>
+                <span>
+                  <b>{MODE_LABEL[taughtMode]}</b>
+                  {routeReason ? ` · ${routeReason}` : ""}
+                </span>
+              </div>
+            )}
             <div className="player-wrap"><ExplainerPlayer explainer={explainer} /></div>
+
+            {/* Let them ask for a different kind of help at any point. */}
+            <div className="mp-again">
+              <div className="mp-again-title">Want it taught a different way?</div>
+              <ModePicker value={mode} onPick={pickMode} compact />
+            </div>
+
             <LessonFeedback
               key={`${explainer.id}-${round}`}
               explainerId={explainer.id}

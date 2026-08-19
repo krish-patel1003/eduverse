@@ -1,9 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateExplainer } from "@/lib/gemini";
-import { getLearningStyle, hintToPrompt, learnerHint, recordEvent } from "@/lib/profile";
+import { hintToPrompt, learnerHint, recordEvent } from "@/lib/profile";
 import { currentUserId, currentStudentId } from "@/lib/auth";
 import { buildPrereqLadder, diagnoseNextSkill } from "@/lib/diagnose";
-import { US_PEDAGOGY, modeToPrompt, pickTeachingMode, type TeachingMode } from "@/lib/pedagogy";
+import {
+  US_PEDAGOGY,
+  isTeachingMode,
+  routeTeaching,
+  routeToPrompt,
+  type ConcreteMode,
+  type TeachingMethod,
+  type TeachingMode,
+} from "@/lib/pedagogy";
+import { bestForSkill } from "@/lib/effectiveness";
 import { feedbackTeachingHint, feedbackWantsModeChange } from "@/lib/feedback";
 import {
   getWeakArea,
@@ -37,6 +46,9 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => ({}));
     const weakAreaId = String(body?.weakAreaId ?? "");
     const force = body?.reteach === true; // generate a fresh take even if one exists
+    // What the CHILD asked for. "auto" (the prominent default) hands the choice
+    // to the engine, which is what we want most learners pressing.
+    const requested: TeachingMode = isTeachingMode(body?.mode) ? body.mode : "auto";
 
     const weak = getWeakArea(weakAreaId);
     if (!weak) return NextResponse.json({ error: "Weak area not found" }, { status: 404 });
@@ -65,6 +77,8 @@ export async function POST(req: NextRequest) {
         droppedDown: last?.droppedDown ?? false,
         reason: last?.reason ?? "",
         mode: last?.mode,
+        method: last?.method,
+        routeReason: last?.routeReason ?? "",
         ...meta,
       });
     }
@@ -110,15 +124,45 @@ export async function POST(req: NextRequest) {
     // ---- decide HOW to teach it ---------------------------------------------
     // A retry must not just reword the same delivery. Change the teaching mode,
     // preferring whatever has actually produced mastery for this learner before.
-    const style = getLearningStyle(studentId);
     const lastFeedback = lastRound?.feedback;
-    // If the learner said the last lesson was confusing / too fast / unhelpful, do
-    // not lead with their usual best mode: let the rotation pick a fresh delivery.
-    const forceModeChange = !!lastFeedback && feedbackWantsModeChange(lastFeedback.reactions);
-    const mode = pickTeachingMode({
-      alreadyTried: session.rounds.map((r) => r.mode).filter((m): m is TeachingMode => !!m),
-      preferred: forceModeChange ? undefined : (style.bestMode as TeachingMode | undefined),
+    // If the learner said the last lesson was confusing / too fast / unhelpful,
+    // do not reuse what "usually" works: force a genuinely different approach.
+    const forceChange = !!lastFeedback && feedbackWantsModeChange(lastFeedback.reactions);
+
+    // Signals the router reasons over. These come from the diagnosis of the last
+    // attempt, not from a fixed profile.
+    const sameMisconceptionTwice = (() => {
+      const seen = new Map<string, number>();
+      for (const r of session.rounds)
+        for (const m of r.misconceptions ?? []) seen.set(m, (seen.get(m) ?? 0) + 1);
+      return [...seen.values()].some((n) => n > 1);
+    })();
+    // Right answers but weak justification: auto-graded items landed while the
+    // open, explain-your-reasoning items did not.
+    const canDoCannotExplain = (() => {
+      const ev = evidence;
+      if (!ev.length) return false;
+      const open = ev.filter((e) => ["short_answer", "essay", "math_multistep", "pseudocode"].includes(e.type));
+      const auto = ev.filter((e) => ["mcq", "multi_mcq", "fill_blank"].includes(e.type));
+      if (open.length < 2 || auto.length < 2) return false;
+      const pct = (xs: typeof ev) => xs.filter((e) => e.correct).length / xs.length;
+      return pct(auto) >= 0.75 && pct(open) < 0.5;
+    })();
+    const needsFluency = (lastRound?.overall ?? 0) >= 60 && (lastRound?.overall ?? 0) < 70;
+
+    const route = routeTeaching({
+      requested,
       round: roundNum,
+      mastery: weak.mastery,
+      droppedDown: diagnosis.droppedDown,
+      repeatedMistake: sameMisconceptionTwice || forceChange,
+      isReview: weak.status === "mastered",
+      canDoCannotExplain,
+      needsFluency,
+      alreadyTried: session.rounds
+        .filter((r) => r.mode && r.method)
+        .map((r) => ({ mode: r.mode as ConcreteMode, method: r.method as TeachingMethod })),
+      bestForSkill: forceChange ? null : bestForSkill(studentId, diagnosis.teachSkill),
     });
 
     // ---- build the lesson prompt from the diagnosis + real mistakes ----------
@@ -140,7 +184,7 @@ export async function POST(req: NextRequest) {
         : "") +
       (wrongExamples ? `Here is exactly what they got wrong last time:\n${wrongExamples}\n` : "") +
       (lastFeedback ? `${feedbackTeachingHint(lastFeedback.reactions, lastFeedback.text)}\n` : "") +
-      `${modeToPrompt(mode)}\n` +
+      `${routeToPrompt(route)}\n` +
       `Make sure they can actually apply the skill, not just recall it.`;
 
     const explainer = await generateExplainer({
@@ -159,14 +203,26 @@ export async function POST(req: NextRequest) {
         taughtSkill: diagnosis.teachSkill,
         droppedDown: diagnosis.droppedDown,
         reason: diagnosis.reason,
-        mode,
+        mode: route.mode,
+        method: route.method,
+        routeReason: route.rationale,
+        beforeScore: lastRound?.overall,
         at: Date.now(),
       },
     ];
     updateAdaptiveSession(session.id, { status: "teaching", rounds });
     recordEvent({
       type: "adaptive_taught",
-      data: { topic: weak.topic, aspect: weak.aspect, skill: diagnosis.teachSkill, droppedDown: diagnosis.droppedDown, mode, round: roundNum },
+      data: {
+        topic: weak.topic,
+        aspect: weak.aspect,
+        skill: diagnosis.teachSkill,
+        droppedDown: diagnosis.droppedDown,
+        mode: route.mode,
+        method: route.method,
+        auto: route.auto,
+        round: roundNum,
+      },
       studentId,
     });
 
@@ -177,7 +233,10 @@ export async function POST(req: NextRequest) {
       teachSkill: diagnosis.teachSkill,
       droppedDown: diagnosis.droppedDown,
       reason: diagnosis.reason,
-      mode,
+      mode: route.mode,
+      method: route.method,
+      routeReason: route.rationale,
+      auto: route.auto,
       ...meta,
     });
   } catch (err) {

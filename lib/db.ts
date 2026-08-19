@@ -165,6 +165,23 @@ function migrate(db: Database.Database): void {
       updated_at  INTEGER NOT NULL
     );
 
+    -- Teaching Effectiveness Profile: which (mode, method) actually produced
+    -- learning, per child AND per skill. The best approach is not a fixed
+    -- "learning style"; it changes by concept, so it is keyed by skill.
+    CREATE TABLE IF NOT EXISTS teaching_outcomes (
+      id          TEXT PRIMARY KEY,
+      student_id  TEXT NOT NULL,
+      skill       TEXT NOT NULL,
+      topic       TEXT,
+      mode        TEXT NOT NULL,
+      method      TEXT NOT NULL,
+      before_score INTEGER,
+      after_score  INTEGER,
+      successful  INTEGER NOT NULL DEFAULT 0,
+      created_at  INTEGER NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_teachout_skill ON teaching_outcomes (student_id, skill);
     CREATE INDEX IF NOT EXISTS idx_concepts_student ON concepts (student_id);
     CREATE INDEX IF NOT EXISTS idx_notes_module ON notes (module_id, t_ms);
     CREATE INDEX IF NOT EXISTS idx_certs_student ON certificates (student_id);
