@@ -7,6 +7,7 @@
 import { callGemini } from "./gemini";
 import { newId } from "./db";
 import { US_PEDAGOGY } from "./pedagogy";
+import { VISUAL_SPEC, normalizeVisual } from "./visuals";
 import type {
   AnswerEvidence,
   Assessment,
@@ -81,10 +82,13 @@ Output ONLY this JSON:
       "blanks": ["expected", "fills"],      // fill_blank ONLY, in order; the prompt uses ___ for each blank
       "language": "python",                 // code_* items
       "starterCode": "...",                 // code_bugfix (buggy code) / code_write (signature), optional
-      "rubric": "what a correct answer must demonstrate"  // ALL open (non-auto-graded) items; hidden from the learner
+      "rubric": "what a correct answer must demonstrate",  // ALL open (non-auto-graded) items; hidden from the learner
+      "visual": { "kind": "fraction_bar", "parts": 8, "shaded": 3 }  // OPTIONAL, see VISUALS below
     }
   ]
 }
+
+${VISUAL_SPEC}
 
 Rules:
 - Every item has an "aspect". Together the items must cover every major aspect (diagnostic) or every aspect of the taught material (thorough).
@@ -128,6 +132,8 @@ function normItem(raw: unknown): AssessmentItem | null {
     if (typeof r.language === "string") item.language = r.language.trim().slice(0, 20);
     if (typeof r.starterCode === "string") item.starterCode = r.starterCode.slice(0, 2000);
   }
+  const visual = normalizeVisual(r.visual);
+  if (visual) item.visual = visual;
   return item;
 }
 
