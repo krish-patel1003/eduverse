@@ -7,8 +7,11 @@
 import { randomBytes, scryptSync, timingSafeEqual } from "crypto";
 import type { NextRequest } from "next/server";
 import { db, newId, now, DEFAULT_STUDENT } from "./db";
+import { childBelongsTo, defaultChildId } from "./children";
 
 export const SESSION_COOKIE = "sid";
+/** Which child profile the account is currently working as. */
+export const ACTIVE_CHILD_COOKIE = "kid";
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 export interface User {
@@ -59,10 +62,10 @@ export function createUser(email: string, password: string): User {
     // Each account is its own student scope.
     conn
       .prepare(
-        `INSERT OR IGNORE INTO students (id, motivation, learning_style, goals, created_at)
-         VALUES (?, NULL, '{}', '[]', ?)`
+        `INSERT OR IGNORE INTO students (id, owner_id, motivation, learning_style, goals, created_at)
+         VALUES (?, ?, NULL, '{}', '[]', ?)`
       )
-      .run(id, ts);
+      .run(id, id, ts);
   });
   tx();
   return { id, email: clean };
@@ -120,13 +123,30 @@ export function currentUser(req: NextRequest): User | null {
 }
 
 /**
- * Which student scope this request reads/writes. Logged-in users get their own
- * id; anonymous requests (e.g. the quick-chat) fall back to the shared default
- * student, preserving pre-accounts behavior.
+ * Which student scope this request reads/writes: the ACTIVE CHILD of the
+ * logged-in account. Every learning table is keyed by student_id, so resolving
+ * the active child here scopes the entire app to that child.
+ *
+ * The selected child is held in a cookie, but it is never trusted on its own:
+ * ownership is re-checked on every request, and an unknown or foreign id falls
+ * back to the account's first child. Anonymous requests (quick chat) keep the
+ * shared default student, preserving pre-accounts behavior.
  */
 export function currentStudentId(req: NextRequest): string {
-  return currentUserId(req) ?? DEFAULT_STUDENT;
+  const userId = currentUserId(req);
+  if (!userId) return DEFAULT_STUDENT;
+  const picked = req.cookies.get(ACTIVE_CHILD_COOKIE)?.value;
+  if (picked && childBelongsTo(picked, userId)) return picked;
+  return defaultChildId(userId);
 }
+
+export const childCookieOptions = {
+  httpOnly: true,
+  sameSite: "lax" as const,
+  secure: false,
+  path: "/",
+  maxAge: 365 * 24 * 60 * 60,
+};
 
 export const sessionCookieOptions = (expiresAt: number) => ({
   httpOnly: true,

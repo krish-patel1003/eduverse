@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import ChildSwitcher from "./ChildSwitcher";
 
 // Slim top bar for switching between the platform's surfaces.
 const LINKS = [
@@ -50,6 +51,7 @@ export default function AppNav() {
       <div className="nav-auth">
         {loaded && (email ? (
           <>
+            <ChildSwitcher />
             <span className="nav-email" title={email}>{email}</span>
             <button className="nav-link nav-btn" onClick={logout}>Log out</button>
           </>
