@@ -79,6 +79,8 @@ export async function POST(req: NextRequest) {
         mode: last?.mode,
         method: last?.method,
         routeReason: last?.routeReason ?? "",
+        roundsUsed: session.rounds.length,
+        maxRounds: MAX_ROUNDS,
         ...meta,
       });
     }
@@ -86,7 +88,12 @@ export async function POST(req: NextRequest) {
     if (session.rounds.length >= MAX_ROUNDS) {
       updateAdaptiveSession(session.id, { status: "paused" });
       return NextResponse.json(
-        { error: "You've had several rounds on this. Take a break and come back to it.", capped: true },
+        {
+          error: "You've had several rounds on this. Take a break and come back to it.",
+          capped: true,
+          roundsUsed: session.rounds.length,
+          maxRounds: MAX_ROUNDS,
+        },
         { status: 429 }
       );
     }
@@ -237,6 +244,8 @@ export async function POST(req: NextRequest) {
       method: route.method,
       routeReason: route.rationale,
       auto: route.auto,
+      roundsUsed: rounds.length,
+      maxRounds: MAX_ROUNDS,
       ...meta,
     });
   } catch (err) {
