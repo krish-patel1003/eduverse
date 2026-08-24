@@ -147,3 +147,13 @@ export function childSummary(id: string): { name: string; avatar: string } | nul
   const c = getChild(id);
   return c ? { name: c.name, avatar: c.avatar } : null;
 }
+
+/** Whether this child has opted into slower, higher-fidelity drawn lessons. */
+export function getHiFi(id: string): boolean {
+  const r = db().prepare(`SELECT hifi FROM students WHERE id = ?`).get(id) as { hifi: number | null } | undefined;
+  return !!r?.hifi;
+}
+
+export function setHiFi(id: string, on: boolean): void {
+  db().prepare(`UPDATE students SET hifi = ? WHERE id = ?`).run(on ? 1 : 0, id);
+}

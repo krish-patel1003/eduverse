@@ -411,6 +411,11 @@ export interface AssessmentItem {
   rubric?: string;
   /** An exact, deterministically drawn figure shown with the question. */
   visual?: ItemVisual;
+  /**
+   * Progressive hints, gentlest first. Using them is encouraged, but a correct
+   * answer reached with hints is NOT counted as independent mastery.
+   */
+  hints?: string[];
 }
 
 export interface Assessment {
@@ -425,6 +430,8 @@ export interface Assessment {
 
 /** Per-item grade after submission. */
 export interface AssessmentItemGrade {
+  /** How many hints the learner revealed before answering. */
+  hintsUsed?: number;
   itemId: string;
   correct: boolean;
   /** 0..100. */
@@ -446,6 +453,8 @@ export interface AssessmentItemGrade {
  * learner actually got wrong rather than only which aspect tag failed.
  */
 export interface AnswerEvidence {
+  /** How many hints were revealed on this item. */
+  hintsUsed?: number;
   aspect: string;
   type: AssessmentItemType;
   question: string;
@@ -462,6 +471,8 @@ export interface AssessmentResult {
   perItem: AssessmentItemGrade[];
   /** Full per-item record (question, answer, verdict, misconception). */
   evidence?: AnswerEvidence[];
+  /** Raw vs independent vs hint-discounted score, for judging real mastery. */
+  mastery?: { raw: number; independent: number; hintsUsed: number; effective: number };
   perAspect: { aspect: string; score: number }[];
   /** 0..100 overall. */
   overall: number;

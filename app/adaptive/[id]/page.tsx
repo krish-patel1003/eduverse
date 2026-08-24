@@ -208,14 +208,14 @@ export default function AdaptiveLoopPage({ params }: { params: Promise<{ id: str
     }
   }
 
-  async function submitAssessment(answers: Record<string, unknown>) {
+  async function submitAssessment(answers: Record<string, unknown>, hintsUsed: Record<string, number> = {}) {
     setPhase("assessLoading");
     setError(null);
     try {
       const res = await fetch("/api/adaptive/assess", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId: sessionId || sessionId2, answers, retryOf }),
+        body: JSON.stringify({ sessionId: sessionId || sessionId2, answers, hintsUsed, retryOf }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error ?? "Grading failed");
