@@ -21,6 +21,8 @@ function publicItem(it: AssessmentItem) {
     // number of blanks (so the UI can render the right inputs) without the answers
     blanks: it.type === "fill_blank" ? (it.correct?.length ?? 1) : undefined,
     visual: it.visual,
+    // No hints on a diagnostic: it measures what the learner can do unaided, so
+    // offering help there would distort the placement.
   };
 }
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateExplainer } from "@/lib/gemini";
+import { getHiFi } from "@/lib/children";
 import { hintToPrompt, learnerHint, recordEvent } from "@/lib/profile";
 import { currentUserId, currentStudentId } from "@/lib/auth";
 import { buildPrereqLadder, diagnoseNextSkill } from "@/lib/diagnose";
@@ -155,7 +156,17 @@ export async function POST(req: NextRequest) {
       const pct = (xs: typeof ev) => xs.filter((e) => e.correct).length / xs.length;
       return pct(auto) >= 0.75 && pct(open) < 0.5;
     })();
-    const needsFluency = (lastRound?.overall ?? 0) >= 60 && (lastRound?.overall ?? 0) < 70;
+    // Real fluency signal: they are getting answers right, but leaning on hints
+    // to do it. Knowing the method without being able to run it unaided is
+    // exactly what focused practice fixes. Falls back to the old score band when
+    // no hint data was recorded.
+    const needsFluency = (() => {
+      const raw = lastRound?.overall ?? 0;
+      const indep = lastRound?.independent;
+      const hints = lastRound?.hintsUsed ?? 0;
+      if (typeof indep === "number" && raw >= 60) return raw - indep >= 25 || hints >= 3;
+      return raw >= 60 && raw < 70;
+    })();
 
     const route = routeTeaching({
       requested,
@@ -194,10 +205,14 @@ export async function POST(req: NextRequest) {
       `${routeToPrompt(route)}\n` +
       `Make sure they can actually apply the skill, not just recall it.`;
 
+    // Higher-fidelity drawn lessons are opt-in per child (they take several
+    // minutes), with a per-request override.
+    const hifi = typeof body?.hifi === "boolean" ? body.hifi : getHiFi(studentId);
     const explainer = await generateExplainer({
       prompt,
       style: "interactive",
       learnerBlock: hintToPrompt(learnerHint(studentId)),
+      fidelity: hifi ? "hifi" : "fast",
     });
     saveSessionExplainer(session.id, explainer, roundNum);
 

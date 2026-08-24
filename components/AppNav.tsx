@@ -11,6 +11,7 @@ const LINKS = [
   { href: "/adaptive", label: "Adaptive Tutor" },
   { href: "/course/new", label: "New course" },
   { href: "/chat", label: "Quick chat" },
+  { href: "/insights", label: "Insights" },
   { href: "/profile", label: "Profile" },
 ];
 

@@ -17,11 +17,13 @@ export interface PublicItem {
   blanks?: number;
   /** An exact figure drawn with the question (fraction bar, number line, ...). */
   visual?: ItemVisual;
+  /** Progressive hints, gentlest first. */
+  hints?: string[];
 }
 
 interface Props {
   items: PublicItem[];
-  onSubmit: (answers: Record<string, unknown>) => void;
+  onSubmit: (answers: Record<string, unknown>, hintsUsed: Record<string, number>) => void;
   submitting?: boolean;
   submitLabel?: string;
   title?: string;
@@ -42,6 +44,12 @@ const TYPE_LABEL: Record<AssessmentItemType, string> = {
 
 export default function AssessmentRunner({ items, onSubmit, submitting, submitLabel, title, subtitle }: Props) {
   const [answers, setAnswers] = useState<Record<string, unknown>>({});
+  // Hints revealed per item. Asking for help is encouraged, but it is recorded:
+  // a right answer reached with hints is progress, not yet independent mastery.
+  const [hintsShown, setHintsShown] = useState<Record<string, number>>({});
+
+  const revealHint = (id: string, total: number) =>
+    setHintsShown((h) => ({ ...h, [id]: Math.min(total, (h[id] ?? 0) + 1) }));
 
   const set = (id: string, v: unknown) => setAnswers((a) => ({ ...a, [id]: v }));
 
@@ -85,6 +93,26 @@ export default function AssessmentRunner({ items, onSubmit, submitting, submitLa
               <div className="ai-prompt">{it.prompt}</div>
 
               {it.visual && <ItemVisualFigure visual={it.visual} />}
+
+              {(it.hints?.length ?? 0) > 0 && (
+                <div className="ai-hints">
+                  {(it.hints ?? []).slice(0, hintsShown[it.id] ?? 0).map((h, hi) => (
+                    <div key={hi} className="ai-hint">
+                      <span className="ai-hint-ico">💡</span>
+                      <span>{h}</span>
+                    </div>
+                  ))}
+                  {(hintsShown[it.id] ?? 0) < (it.hints?.length ?? 0) && (
+                    <button
+                      type="button"
+                      className="ai-hint-btn"
+                      onClick={() => revealHint(it.id, it.hints!.length)}
+                    >
+                      {(hintsShown[it.id] ?? 0) === 0 ? "💡 Stuck? Get a hint" : "💡 One more hint"}
+                    </button>
+                  )}
+                </div>
+              )}
 
               {it.starterCode && (
                 <pre className="ai-starter"><code>{it.starterCode}</code></pre>
@@ -152,7 +180,7 @@ export default function AssessmentRunner({ items, onSubmit, submitting, submitLa
 
       <div className="assess-foot">
         <span className="assess-progress">{answered}/{items.length} answered</span>
-        <button className="send big" onClick={() => onSubmit(answers)} disabled={submitting || answered === 0}>
+        <button className="send big" onClick={() => onSubmit(answers, hintsShown)} disabled={submitting || answered === 0}>
           {submitting ? "Grading…" : submitLabel ?? "Submit"}
         </button>
       </div>

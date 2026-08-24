@@ -249,6 +249,10 @@ export interface AdaptiveRound {
   evidence?: AnswerEvidence[];
   /** Misconceptions named from this attempt. */
   misconceptions?: string[];
+  /** Hints revealed across this attempt. */
+  hintsUsed?: number;
+  /** Percentage answered correctly with no hints at all. */
+  independent?: number;
   /** The learner's end-of-lesson feedback on this round's video. */
   feedback?: RoundFeedback;
   at: number;

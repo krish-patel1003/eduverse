@@ -32,6 +32,7 @@ function publicItem(it: AssessmentItem) {
     starterCode: it.starterCode,
     blanks: it.type === "fill_blank" ? (it.correct?.length ?? 1) : undefined,
     visual: it.visual,
+    hints: it.hints,
   };
 }
 
@@ -92,7 +93,8 @@ export async function POST(req: NextRequest) {
       : getSessionAssessment(sessionId);
     if (!session || !assessment) return NextResponse.json({ error: "Session not found" }, { status: 404 });
 
-    const result = await gradeAssessment({ assessment, answers });
+    const hintsUsed = (body?.hintsUsed && typeof body.hintsUsed === "object" ? body.hintsUsed : {}) as Record<string, number>;
+    const result = await gradeAssessment({ assessment, answers, hintsUsed });
 
     // Record the outcome on the latest round.
     const rounds = [...session.rounds];
@@ -106,13 +108,18 @@ export async function POST(req: NextRequest) {
       last.weakAspects = result.weakAspects;
       // Keep the full record: this is what the NEXT round diagnoses from.
       last.evidence = result.evidence ?? [];
+      last.hintsUsed = result.mastery?.hintsUsed ?? 0;
+      last.independent = result.mastery?.independent;
       last.misconceptions = [
         ...new Set((result.evidence ?? []).map((e) => e.misconception).filter((m): m is string => !!m)),
       ];
     }
 
     // Mastery: passing the thorough check counts as mastered; otherwise record progress.
-    const mastery = result.passed ? Math.max(0.85, result.overall / 100) : result.overall / 100;
+    // Judge mastery on the hint-discounted score: getting there after two hints
+    // is genuine progress, but it is not yet fluency.
+    const effective = result.mastery?.effective ?? result.overall;
+    const mastery = result.passed ? Math.max(0.85, effective / 100) : effective / 100;
     setWeakAreaMastery(session.weakAreaId, mastery);
     // Schedule the next review so mastery does not silently decay.
     scheduleReview(session.weakAreaId, result.passed);
@@ -170,6 +177,7 @@ export async function POST(req: NextRequest) {
       perItem: result.perItem,
       weakAspects: result.weakAspects,
       summary: result.summary,
+      mastery: result.mastery,
       reward,
       progress,
     });

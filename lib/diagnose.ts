@@ -13,6 +13,8 @@
 // aspect the learner originally picked.
 
 import { callGemini } from "./gemini";
+import { db, newId, now } from "./db";
+import { bandScopePrompt, parseBand } from "./gradeband";
 import { US_PEDAGOGY } from "./pedagogy";
 import type { AnswerEvidence, Diagnosis, PrereqLadder, PrereqStep } from "./types";
 
@@ -37,12 +39,61 @@ Rules:
 Output ONLY this JSON:
 { "target": string, "steps": [ { "skill": string, "grade": string, "check": string } ] }`;
 
+// ---- the persisted prerequisite graph --------------------------------------
+//
+// A ladder for (skill, subject, grade band) is identical for every learner, so
+// generating one per request was pure waste: an extra model call on every
+// re-teach, and two children hitting the same skill got independently invented
+// ladders. Cached rows are shared, which also makes the accumulated graph
+// consistent and inspectable.
+
+const key = (s: string) => s.trim().toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ").slice(0, 120);
+
+function readLadder(skill: string, subject: string, band: string): PrereqLadder | null {
+  const r = db()
+    .prepare(`SELECT id, steps FROM prereq_ladders WHERE skill_key = ? AND subject = ? AND band = ?`)
+    .get(key(skill), key(subject), band) as { id: string; steps: string } | undefined;
+  if (!r) return null;
+  db().prepare(`UPDATE prereq_ladders SET uses = uses + 1 WHERE id = ?`).run(r.id);
+  try {
+    const steps = JSON.parse(r.steps) as PrereqStep[];
+    return Array.isArray(steps) && steps.length ? { target: skill, steps } : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeLadder(skill: string, subject: string, band: string, steps: PrereqStep[]): void {
+  if (!steps.length) return;
+  db()
+    .prepare(
+      `INSERT INTO prereq_ladders (id, skill_key, subject, band, steps, uses, created_at)
+       VALUES (?, ?, ?, ?, ?, 1, ?)
+       ON CONFLICT (skill_key, subject, band) DO UPDATE SET steps = excluded.steps`
+    )
+    .run(newId("pre"), key(skill), key(subject), band, JSON.stringify(steps), now());
+}
+
+/** Everything the graph currently knows, for inspection. */
+export function ladderGraphStats(): { rows: number; totalUses: number } {
+  const r = db()
+    .prepare(`SELECT COUNT(*) AS rows, COALESCE(SUM(uses),0) AS totalUses FROM prereq_ladders`)
+    .get() as { rows: number; totalUses: number };
+  return r;
+}
+
 export async function buildPrereqLadder(input: {
   skill: string;
   topic: string;
   level?: string;
 }): Promise<PrereqLadder> {
-  const text = `TARGET SKILL: ${input.skill}\nSUBJECT: ${input.topic}\nLEARNER GRADE LEVEL: ${input.level || "unspecified"}`;
+  const band = parseBand(input.level) ?? "any";
+  const cached = readLadder(input.skill, input.topic, band);
+  if (cached) return cached;
+
+  const text =
+    `TARGET SKILL: ${input.skill}\nSUBJECT: ${input.topic}\nLEARNER GRADE LEVEL: ${input.level || "unspecified"}\n` +
+    bandScopePrompt(input.level);
   try {
     const raw = (await callGemini(LADDER_SPEC, [{ text }])) as Record<string, unknown>;
     const steps: PrereqStep[] = (Array.isArray(raw.steps) ? raw.steps : [])
@@ -54,6 +105,7 @@ export async function buildPrereqLadder(input: {
         grade: typeof s.grade === "string" ? s.grade.trim().slice(0, 40) : undefined,
         check: typeof s.check === "string" ? stripDashes(s.check.trim()).slice(0, 240) : "",
       }));
+    writeLadder(input.skill, input.topic, band, steps);
     return { target: input.skill, steps };
   } catch {
     return { target: input.skill, steps: [] };

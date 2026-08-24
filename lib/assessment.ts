@@ -8,6 +8,7 @@ import { callGemini } from "./gemini";
 import { newId } from "./db";
 import { US_PEDAGOGY } from "./pedagogy";
 import { VISUAL_SPEC, normalizeVisual } from "./visuals";
+import { bandScopePrompt, outOfBand, visualOutOfBand } from "./gradeband";
 import type {
   AnswerEvidence,
   Assessment,
@@ -55,7 +56,7 @@ const DOMAIN_GUIDE: Record<AssessmentDomain, string> = {
     `Use mostly mcq and multi_mcq, plus a few short_answer items. Keep it broad.`,
 };
 
-function spec(mode: "diagnostic" | "thorough"): string {
+function spec(mode: "diagnostic" | "thorough", level?: string): string {
   const shape =
     mode === "diagnostic"
       ? `Build an EXHAUSTIVE diagnostic that covers EVERY important sub-aspect of the topic for this education level. 14 to 20 items. Lean on mcq/multi_mcq with a few short_answer, but still include the domain's hands-on types where they reveal understanding.`
@@ -65,6 +66,8 @@ function spec(mode: "diagnostic" | "thorough"): string {
 CALIBRATE DIFFICULTY AND SCOPE TO THE LEARNER'S EDUCATION LEVEL. A 5th grader's "Mathematics" means 5th-grade arithmetic and fractions; a university student's "Mathematics" means calculus, proofs, linear algebra, etc. Never assess above or below the stated level. ${VOICE}
 
 ${US_PEDAGOGY}
+
+${bandScopePrompt(level)}
 
 First classify the topic's DOMAIN as one of: coding, language, math, general.
 Then pick item types to match the domain.
@@ -83,12 +86,17 @@ Output ONLY this JSON:
       "language": "python",                 // code_* items
       "starterCode": "...",                 // code_bugfix (buggy code) / code_write (signature), optional
       "rubric": "what a correct answer must demonstrate",  // ALL open (non-auto-graded) items; hidden from the learner
-      "visual": { "kind": "fraction_bar", "parts": 8, "shaded": 3 }  // OPTIONAL, see VISUALS below
+      "visual": { "kind": "fraction_bar", "parts": 8, "shaded": 3 },  // OPTIONAL, see VISUALS below
+      "hints": ["a gentle nudge", "a more concrete step"]  // 1-2 progressive hints, see HINTS below
     }
   ]
 }
 
 ${VISUAL_SPEC}
+
+HINTS: give every item 1 or 2 "hints", gentlest first. A hint points at the next
+thing to think about, it never states the answer. Hint 1 should be a nudge ("what
+do the digits in the tens column add up to?"); hint 2 may walk one concrete step.
 
 Rules:
 - Every item has an "aspect". Together the items must cover every major aspect (diagnostic) or every aspect of the taught material (thorough).
@@ -134,6 +142,12 @@ function normItem(raw: unknown): AssessmentItem | null {
   }
   const visual = normalizeVisual(r.visual);
   if (visual) item.visual = visual;
+  if (Array.isArray(r.hints)) {
+    const hints = (r.hints.filter((h) => typeof h === "string" && h.trim()) as string[])
+      .slice(0, 2)
+      .map((h) => stripDashes(h.trim()).slice(0, 240));
+    if (hints.length) item.hints = hints;
+  }
   return item;
 }
 
@@ -149,9 +163,32 @@ export async function generateAssessment(input: {
   if (input.priorMistakes?.length)
     text += `\nThe learner previously struggled with: ${input.priorMistakes.join("; ")}. Probe these harder.`;
 
-  const raw = (await callGemini(spec(input.mode), [{ text }])) as Record<string, unknown>;
+  const raw = (await callGemini(spec(input.mode, input.level), [{ text }])) as Record<string, unknown>;
   const domain = DOMAINS.includes(raw.domain as AssessmentDomain) ? (raw.domain as AssessmentDomain) : "general";
-  const items = (Array.isArray(raw.items) ? raw.items : []).map(normItem).filter((x): x is AssessmentItem => !!x);
+  const generated = (Array.isArray(raw.items) ? raw.items : []).map(normItem).filter((x): x is AssessmentItem => !!x);
+
+  // Prompting alone does not reliably hold the grade band, so screen the output.
+  // A figure that breaks the band is dropped on its own; an item whose text
+  // breaks it is dropped entirely (we generate more items than we need).
+  const rejected: string[] = [];
+  const screened = generated.filter((it) => {
+    if (it.visual && visualOutOfBand(it.visual, input.level)) delete it.visual;
+    const haystack = [it.prompt, ...(it.options ?? []).map((o) => o.text)].join(" ");
+    const bad = outOfBand(haystack, input.level);
+    // If the learner explicitly asked to work on that concept, honor the request:
+    // a Grade 2 child whose topic IS fractions should still get fraction questions.
+    if (bad && !outOfBand(input.topic, input.level)) {
+      rejected.push(`${bad}: ${it.prompt.slice(0, 60)}`);
+      return false;
+    }
+    return true;
+  });
+  // Screening must never leave the learner with nothing. If it was too
+  // aggressive, keep the original set rather than failing the whole assessment.
+  const items = screened.length >= Math.min(3, generated.length) ? screened : generated;
+  if (rejected.length && items === screened)
+    console.warn(`assessment: dropped ${rejected.length} out-of-band item(s)`, rejected.slice(0, 3));
+
   if (items.length === 0) throw new Error("Assessment generation produced no items");
   const aspects = [...new Set(items.map((i) => i.aspect))];
   return { id: newId("asmt"), topic: input.topic, domain, level: input.level, aspects, items };
@@ -208,11 +245,29 @@ Also name the single PREREQUISITE SKILL the learner is missing, phrased as somet
 Output ONLY this JSON:
 { "diagnoses": [ { "id": string, "misconception": string, "missingSkill": string } ] }`;
 
+export interface MasterySignal {
+  /** Raw percentage correct. */
+  raw: number;
+  /** Percentage of items answered correctly with NO hints. */
+  independent: number;
+  /** Total hints revealed across the assessment. */
+  hintsUsed: number;
+  /**
+   * The score mastery is judged on. Correct-with-hints counts, but only
+   * partially: getting there after two hints is real progress, not fluency.
+   */
+  effective: number;
+}
+
 export async function gradeAssessment(input: {
   assessment: Assessment;
   answers: Record<string, unknown>;
+  /** Hints revealed per item id, for the mastery signal. */
+  hintsUsed?: Record<string, number>;
 }): Promise<AssessmentResult> {
   const { assessment, answers } = input;
+  const hintsUsed = input.hintsUsed ?? {};
+  const hintsFor = (id: string) => Math.max(0, Math.round(Number(hintsUsed[id]) || 0));
   const perItem: AssessmentItemGrade[] = [];
 
   // 1. Auto-grade objective items.
@@ -266,6 +321,8 @@ export async function gradeAssessment(input: {
       for (const it of openItems) perItem.push({ itemId: it.id, correct: false, score: 0, feedback: "Could not grade this answer." });
     }
   }
+
+  for (const g of perItem) g.hintsUsed = hintsFor(g.itemId);
 
   // 3. Diagnose every WRONG item: name the misconception behind the answer.
   //    This is the signal the remediation loop reasons over, so it covers
@@ -324,8 +381,28 @@ export async function gradeAssessment(input: {
       score: g?.score ?? 0,
       misconception: g?.misconception,
       missingSkill: g?.missingSkill,
+      hintsUsed: g?.hintsUsed ?? 0,
     };
   });
+
+  // Mastery is not just "did they get it right". A correct answer reached after
+  // two hints is progress, not fluency, so hint use discounts the score mastery
+  // is judged on. Independent success is tracked separately.
+  const total = perItem.length || 1;
+  const independentWins = perItem.filter((p) => p.correct && (p.hintsUsed ?? 0) === 0).length;
+  const totalHints = perItem.reduce((n, p) => n + (p.hintsUsed ?? 0), 0);
+  const credited = perItem.reduce((sum, p) => {
+    if (!p.correct) return sum + p.score * 0.5;
+    // Full credit unaided, 80% after one hint, 60% after two or more.
+    const h = p.hintsUsed ?? 0;
+    return sum + (h === 0 ? 1 : h === 1 ? 0.8 : 0.6);
+  }, 0);
+  const mastery: MasterySignal = {
+    raw: overall,
+    independent: Math.round((independentWins / total) * 100),
+    hintsUsed: totalHints,
+    effective: Math.round((credited / total) * 100),
+  };
 
   return {
     perItem,
@@ -334,6 +411,7 @@ export async function gradeAssessment(input: {
     passed,
     weakAspects,
     evidence,
+    mastery,
     summary: passed
       ? "Strong understanding across every aspect."
       : `Needs work on: ${weakAspects.join(", ") || "some aspects"}.`,

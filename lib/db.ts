@@ -181,6 +181,20 @@ function migrate(db: Database.Database): void {
       created_at  INTEGER NOT NULL
     );
 
+    -- Prerequisite graph. Ladders are expensive to generate and identical for
+    -- every learner at the same skill + subject + grade band, so they are cached
+    -- and shared. The accumulated rows form the prerequisite graph.
+    CREATE TABLE IF NOT EXISTS prereq_ladders (
+      id         TEXT PRIMARY KEY,
+      skill_key  TEXT NOT NULL,
+      subject    TEXT NOT NULL,
+      band       TEXT NOT NULL,
+      steps      TEXT NOT NULL DEFAULT '[]',
+      uses       INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL,
+      UNIQUE (skill_key, subject, band)
+    );
+
     CREATE INDEX IF NOT EXISTS idx_teachout_skill ON teaching_outcomes (student_id, skill);
     CREATE INDEX IF NOT EXISTS idx_concepts_student ON concepts (student_id);
     CREATE INDEX IF NOT EXISTS idx_notes_module ON notes (module_id, t_ms);
@@ -224,6 +238,8 @@ function migrate(db: Database.Database): void {
   addCol("students", "streak", "streak INTEGER NOT NULL DEFAULT 0");
   // Last day the learner did anything, so the streak can be extended or reset.
   addCol("students", "last_active_at", "last_active_at INTEGER");
+  // Opt-in to the slower, higher-fidelity drawn lessons in the adaptive loop.
+  addCol("students", "hifi", "hifi INTEGER NOT NULL DEFAULT 0");
   // Backfill: every existing account's self-student becomes its own first child.
   db.exec(`UPDATE students SET owner_id = id WHERE owner_id IS NULL AND id IN (SELECT id FROM users)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_students_owner ON students (owner_id)`);
