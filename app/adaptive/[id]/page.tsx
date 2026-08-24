@@ -7,7 +7,15 @@ import ExplainerPlayer from "@/components/ExplainerPlayer";
 import AssessmentRunner, { type PublicItem } from "@/components/AssessmentRunner";
 import LessonFeedback from "@/components/LessonFeedback";
 import ModePicker from "@/components/ModePicker";
-import { MODE_EMOJI, MODE_LABEL, type TeachingMode } from "@/lib/pedagogy";
+import {
+  METHOD_LABEL,
+  MODE_EMOJI,
+  MODE_LABEL,
+  isTeachingMethod,
+  isTeachingMode,
+  type TeachingMode,
+  type TeachingMethod,
+} from "@/lib/pedagogy";
 import { humanizeSkill } from "@/lib/display";
 import type { Explainer } from "@/lib/types";
 
@@ -17,7 +25,7 @@ interface RoundInfo {
   round: number;
   taughtSkill?: string;
   mode?: TeachingMode;
-  method?: string;
+  method?: TeachingMethod;
   droppedDown?: boolean;
   reason?: string;
   overall?: number;
@@ -56,6 +64,11 @@ export default function AdaptiveLoopPage({ params }: { params: Promise<{ id: str
   const [mode, setMode] = useState<TeachingMode>("auto");
   const [taughtMode, setTaughtMode] = useState<TeachingMode | null>(null);
   const [routeReason, setRouteReason] = useState("");
+  // How many different ways we have already tried this skill, and the cap. Shown
+  // up front so hitting the limit is never a surprise.
+  const [roundsUsed, setRoundsUsed] = useState(0);
+  const [maxRounds, setMaxRounds] = useState(4);
+  const [capped, setCapped] = useState(false);
   const [sessionId2, setSessionId2] = useState("");
   const [retryOf, setRetryOf] = useState<number | null>(null);
   const [items, setItems] = useState<PublicItem[]>([]);
@@ -82,7 +95,16 @@ export default function AdaptiveLoopPage({ params }: { params: Promise<{ id: str
           window.location.href = "/login";
           return;
         }
+        if (typeof data?.maxRounds === "number") setMaxRounds(data.maxRounds);
+        if (typeof data?.roundsUsed === "number") setRoundsUsed(data.roundsUsed);
+        // Hitting the cap is a normal, expected state, not an error to bury.
+        if (res.status === 429 && data?.capped) {
+          setCapped(true);
+          setPhase("learning");
+          return;
+        }
         if (!res.ok) throw new Error(data?.error ?? "Could not start");
+        setCapped(false);
         setSessionId(data.sessionId);
         setExplainer(data.explainer);
         setMeta({ topic: data.topic, aspect: data.aspect });
@@ -155,6 +177,11 @@ export default function AdaptiveLoopPage({ params }: { params: Promise<{ id: str
     }
   }
 
+  // Capped either because a request told us so, or because the budget is spent.
+  // Deriving it means the learner sees the limit on arrival, not after a click
+  // that silently does nothing.
+  const isCapped = capped || (roundsUsed >= maxRounds && maxRounds > 0);
+
   // Picking a different kind of help re-teaches the same skill that way.
   function pickMode(next: TeachingMode) {
     setMode(next);
@@ -217,6 +244,14 @@ export default function AdaptiveLoopPage({ params }: { params: Promise<{ id: str
           </p>
         </header>
 
+        {error && (
+          <div className="alert" role="alert">
+            <span className="alert-icon">⚠️</span>
+            <span>{error}</span>
+            <button className="alert-x" onClick={() => setError(null)} aria-label="Dismiss">✕</button>
+          </div>
+        )}
+
         {/* When the tutor drops to a prerequisite, say so plainly so going back
             a step reads as deliberate teaching, not a downgrade. */}
         {droppedDown && phase === "learning" && (
@@ -251,11 +286,34 @@ export default function AdaptiveLoopPage({ params }: { params: Promise<{ id: str
             )}
             <div className="player-wrap"><ExplainerPlayer explainer={explainer} /></div>
 
-            {/* Let them ask for a different kind of help at any point. */}
-            <div className="mp-again">
-              <div className="mp-again-title">Want it taught a different way?</div>
-              <ModePicker value={mode} onPick={pickMode} compact />
-            </div>
+            {/* Let them ask for a different kind of help, and be honest up front
+                about how many fresh takes are left so the cap never surprises. */}
+            {isCapped ? (
+              <div className="capped-card">
+                <span className="capped-emoji">🌙</span>
+                <div className="capped-text">
+                  <b>That&apos;s enough on this one for today</b>
+                  <span>
+                    You&apos;ve already tried this {maxRounds} different ways, which is real effort. Sleeping on it
+                    genuinely helps things click, so let&apos;s come back to it tomorrow.
+                  </span>
+                  <span className="capped-note">
+                    You can still rewatch any lesson below or retry a test.
+                  </span>
+                </div>
+                <Link className="send big" href="/adaptive">Try something else ▸</Link>
+              </div>
+            ) : (
+              <div className="mp-again">
+                <div className="mp-again-head">
+                  <div className="mp-again-title">Want it taught a different way?</div>
+                  <span className="mp-tries" title={`A skill can be taught ${maxRounds} different ways before taking a break`}>
+                    {Math.max(0, maxRounds - roundsUsed)} of {maxRounds} fresh takes left
+                  </span>
+                </div>
+                <ModePicker value={mode} onPick={pickMode} compact />
+              </div>
+            )}
 
             <LessonFeedback
               key={`${explainer.id}-${round}`}
@@ -279,6 +337,21 @@ export default function AdaptiveLoopPage({ params }: { params: Promise<{ id: str
                       {humanizeSkill(r.taughtSkill || meta.aspect)}
                       {r.droppedDown && <span className="rh-tag">foundation</span>}
                     </span>
+                    {/* How it was taught. The child sees their own mode label;
+                        the engine method sits in the tooltip for grown-ups. */}
+                    {isTeachingMode(r.mode) && (
+                      <span
+                        className="rh-mode"
+                        title={
+                          r.method && isTeachingMethod(r.method)
+                            ? `Taught as "${MODE_LABEL[r.mode]}" using ${METHOD_LABEL[r.method]}`
+                            : MODE_LABEL[r.mode]
+                        }
+                      >
+                        <span className="rh-mode-emoji">{MODE_EMOJI[r.mode]}</span>
+                        <span className="rh-mode-label">{MODE_LABEL[r.mode]}</span>
+                      </span>
+                    )}
                     <span className="rh-score">
                       {typeof r.overall === "number" ? `${r.overall}%` : "not assessed"}
                     </span>
@@ -420,7 +493,6 @@ export default function AdaptiveLoopPage({ params }: { params: Promise<{ id: str
           </div>
         )}
 
-        {error && <div className="err">{error}</div>}
       </div>
     </div>
   );
