@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateAssessment } from "@/lib/assessment";
-import { createDiagnostic } from "@/lib/adaptive";
+import { createDiagnostic, savePlacement } from "@/lib/adaptive";
 import { currentUserId, currentStudentId } from "@/lib/auth";
 import { getEducationLevel } from "@/lib/profile";
+import { PROBE_SIZE, MAX_STAGES, bandLabel, progress, startPlacement } from "@/lib/placement";
 import type { AssessmentItem } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -37,11 +38,27 @@ export async function POST(req: NextRequest) {
     if (!topic) return NextResponse.json({ error: "Name a topic you struggle with." }, { status: 400 });
 
     const level = getEducationLevel(studentId);
-    const assessment = await generateAssessment({ topic, level, mode: "diagnostic" });
+
+    // Adaptive placement: instead of one long test pitched at the grade the
+    // learner typed in, ask a SHORT probe and then move up or down a band based
+    // on how it went, converging on where they are actually working. The stated
+    // grade is only a starting guess.
+    const placement = startPlacement(topic, level);
+    const assessment = await generateAssessment({
+      topic,
+      level: bandLabel(placement.currentBand),
+      mode: "probe",
+      probeSize: PROBE_SIZE,
+    });
     const diagnosticId = createDiagnostic(assessment, studentId);
+    savePlacement(diagnosticId, placement);
 
     return NextResponse.json({
       diagnosticId,
+      stage: 1,
+      maxStages: MAX_STAGES,
+      band: bandLabel(placement.currentBand),
+      progress: progress(placement),
       topic: assessment.topic,
       domain: assessment.domain,
       level,

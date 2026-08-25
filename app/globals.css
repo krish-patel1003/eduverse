@@ -1249,3 +1249,14 @@ body {
 .ins-n { width: 62px; text-align: right; color: var(--muted); font-size: 12px; }
 .ins-foot { font-size: 12.5px; margin-top: 18px; }
 @media (max-width: 700px) { .ins-method { display: none; } .ins-mode { width: 132px; } }
+
+/* ---- adaptive placement progress ---- */
+.place-bar { margin-bottom: 16px; padding: 14px 16px; border: 1px solid var(--border); border-radius: 14px; background: var(--panel); }
+.place-top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 9px; flex-wrap: wrap; }
+.place-stage { font-size: 13px; font-weight: 600; }
+.place-band { font-size: 12.5px; color: var(--muted); padding: 3px 10px; border-radius: 999px; border: 1px solid var(--border); background: var(--bg); }
+.place-track { display: flex; gap: 5px; }
+.place-seg { flex: 1; height: 5px; border-radius: 999px; background: var(--border); }
+.place-seg.done { background: #34d399; }
+.place-seg.now { background: var(--accent); }
+.place-reason { margin-top: 10px; font-size: 13px; color: var(--muted); line-height: 1.5; }

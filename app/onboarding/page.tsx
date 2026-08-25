@@ -35,6 +35,12 @@ export default function OnboardingPage() {
   const [topic, setTopic] = useState("");
   const [items, setItems] = useState<PublicItem[]>([]);
   const [diagnosticId, setDiagnosticId] = useState("");
+  // Placement runs in short stages. We show which stage we are on and, when the
+  // tutor changes band, WHY, so moving down never feels like a punishment.
+  const [stage, setStage] = useState(1);
+  const [maxStages, setMaxStages] = useState(3);
+  const [band, setBand] = useState("");
+  const [stageReason, setStageReason] = useState("");
   const [report, setReport] = useState<Report | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -90,6 +96,10 @@ export default function OnboardingPage() {
       if (!res.ok) throw new Error(data?.error ?? "Could not build the questionnaire");
       setItems(data.items);
       setDiagnosticId(data.diagnosticId);
+      setStage(data.stage ?? 1);
+      setMaxStages(data.maxStages ?? 3);
+      setBand(data.band ?? "");
+      setStageReason("");
       setStep("diagnostic");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed");
@@ -109,6 +119,16 @@ export default function OnboardingPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error ?? "Grading failed");
+      // Placement is not finished: serve the next probe instead of a report.
+      if (data.placing) {
+        setItems(data.items);
+        setStage(data.stage ?? stage + 1);
+        setMaxStages(data.maxStages ?? maxStages);
+        setBand(data.band ?? "");
+        setStageReason(data.reason ?? "");
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        return;
+      }
       setReport(data);
       setStep("report");
     } catch (err) {
@@ -172,14 +192,33 @@ export default function OnboardingPage() {
         )}
 
         {step === "diagnostic" && (
-          <AssessmentRunner
-            items={items}
-            onSubmit={submitDiagnostic}
-            submitting={busy}
-            submitLabel="Submit diagnostic ▸"
-            title={`Diagnostic: ${topic}`}
-            subtitle="Answer what you can. It's fine to be unsure, this just maps where you stand."
-          />
+          <>
+            {/* Say what is happening between probes, so changing band reads as
+                the tutor finding the right starting point, not as failure. */}
+            <div className="place-bar">
+              <div className="place-top">
+                <span className="place-stage">
+                  Part {stage} of up to {maxStages}
+                </span>
+                {band && <span className="place-band">Trying {band} level</span>}
+              </div>
+              <div className="place-track">
+                {Array.from({ length: maxStages }, (_, i) => (
+                  <span key={i} className={`place-seg ${i < stage - 1 ? "done" : i === stage - 1 ? "now" : ""}`} />
+                ))}
+              </div>
+              {stageReason && <div className="place-reason">{stageReason}</div>}
+            </div>
+            <AssessmentRunner
+              key={`stage-${stage}`}
+              items={items}
+              onSubmit={submitDiagnostic}
+              submitting={busy}
+              submitLabel={stage < maxStages ? "Next ▸" : "Finish ▸"}
+              title={`Finding your level: ${topic}`}
+              subtitle="Just a few questions. Answer what you can, and skip anything you have not learned yet."
+            />
+          </>
         )}
 
         {step === "report" && report && (

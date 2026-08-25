@@ -14,9 +14,11 @@ import {
   type TeachingMode,
 } from "@/lib/pedagogy";
 import { bestForSkill } from "@/lib/effectiveness";
+import { methodPriorFrom } from "@/lib/prior";
 import { feedbackTeachingHint, feedbackWantsModeChange } from "@/lib/feedback";
 import {
   getWeakArea,
+  latestDiagnosticEvidence,
   activeSessionForWeakArea,
   createAdaptiveSession,
   getAdaptiveSession,
@@ -181,6 +183,12 @@ export async function POST(req: NextRequest) {
         .filter((r) => r.mode && r.method)
         .map((r) => ({ mode: r.mode as ConcreteMode, method: r.method as TeachingMethod })),
       bestForSkill: forceChange ? null : bestForSkill(studentId, diagnosis.teachSkill),
+      // Cold start: read a hypothesis from how they actually answered. On the
+      // FIRST lesson there is no previous round, so fall back to the diagnostic
+      // they just sat, which is exactly when a prior is most valuable.
+      prior: forceChange
+        ? null
+        : methodPriorFrom(evidence.length ? evidence : latestDiagnosticEvidence(studentId, weak.topic)),
     });
 
     // ---- build the lesson prompt from the diagnosis + real mistakes ----------
