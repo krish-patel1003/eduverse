@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import AppNav from "@/components/AppNav";
-import AssessmentRunner, { type PublicItem } from "@/components/AssessmentRunner";
+import AssessmentRunner, { type PublicItem, type SubmitMeta } from "@/components/AssessmentRunner";
 import ReportView from "@/components/ReportView";
 
 const EDUCATION = [
@@ -108,14 +108,14 @@ export default function OnboardingPage() {
     }
   }
 
-  async function submitDiagnostic(answers: Record<string, unknown>) {
+  async function submitDiagnostic(answers: Record<string, unknown>, meta: SubmitMeta) {
     setBusy(true);
     setError(null);
     try {
       const res = await fetch(`/api/adaptive/diagnostic/${diagnosticId}/submit`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ answers }),
+        body: JSON.stringify({ answers, seconds: meta.seconds, totalSeconds: meta.totalSeconds }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error ?? "Grading failed");

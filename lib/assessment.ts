@@ -9,6 +9,7 @@ import { newId } from "./db";
 import { US_PEDAGOGY } from "./pedagogy";
 import { VISUAL_SPEC, normalizeVisual } from "./visuals";
 import { bandScopePrompt, outOfBand, visualOutOfBand } from "./gradeband";
+import { fluencyFrom, judgeTiming, type ItemTiming } from "./timing";
 import type {
   AnswerEvidence,
   Assessment,
@@ -94,7 +95,8 @@ Output ONLY this JSON:
       "starterCode": "...",                 // code_bugfix (buggy code) / code_write (signature), optional
       "rubric": "what a correct answer must demonstrate",  // ALL open (non-auto-graded) items; hidden from the learner
       "visual": { "kind": "fraction_bar", "parts": 8, "shaded": 3 },  // OPTIONAL, see VISUALS below
-      "hints": ["a gentle nudge", "a more concrete step"]  // 1-2 progressive hints, see HINTS below
+      "hints": ["a gentle nudge", "a more concrete step"],  // 1-2 progressive hints, see HINTS below
+      "expectedSeconds": 25  // how long a learner AT THIS GRADE who knows it should need, thinking time only
     }
   ]
 }
@@ -104,6 +106,11 @@ ${VISUAL_SPEC}
 HINTS: give every item 1 or 2 "hints", gentlest first. A hint points at the next
 thing to think about, it never states the answer. Hint 1 should be a nudge ("what
 do the digits in the tens column add up to?"); hint 2 may walk one concrete step.
+
+EXPECTED TIME: give every item "expectedSeconds", the THINKING time a learner at
+this exact grade band who understands the material would need. Do not include
+time spent reading the question, that is accounted for separately. Be realistic
+for the age: a young child works more slowly than an adult on the same operation.
 
 Rules:
 - Every item has an "aspect". Together the items must cover every major aspect (diagnostic) or every aspect of the taught material (thorough).
@@ -149,6 +156,8 @@ function normItem(raw: unknown): AssessmentItem | null {
   }
   const visual = normalizeVisual(r.visual);
   if (visual) item.visual = visual;
+  const es = Number(r.expectedSeconds);
+  if (Number.isFinite(es) && es >= 3 && es <= 600) item.expectedSeconds = Math.round(es);
   if (Array.isArray(r.hints)) {
     const hints = (r.hints.filter((h) => typeof h === "string" && h.trim()) as string[])
       .slice(0, 2)
@@ -287,10 +296,13 @@ export async function gradeAssessment(input: {
   answers: Record<string, unknown>;
   /** Hints revealed per item id, for the mastery signal. */
   hintsUsed?: Record<string, number>;
+  /** ACTIVE seconds per item id, for the timing signal. */
+  seconds?: Record<string, number>;
 }): Promise<AssessmentResult> {
   const { assessment, answers } = input;
   const hintsUsed = input.hintsUsed ?? {};
   const hintsFor = (id: string) => Math.max(0, Math.round(Number(hintsUsed[id]) || 0));
+  const secondsIn = input.seconds ?? {};
   const perItem: AssessmentItemGrade[] = [];
 
   // 1. Auto-grade objective items.
@@ -345,13 +357,34 @@ export async function gradeAssessment(input: {
     }
   }
 
+  const byIdEarly0 = new Map(perItem.map((p) => [p.itemId, p]));
   for (const g of perItem) g.hintsUsed = hintsFor(g.itemId);
+
+  // Judge response times. This runs BEFORE diagnosis on purpose: an answer that
+  // was never really attempted must not be fed to the misconception pass, which
+  // would otherwise invent a confident misconception from a random click and
+  // steer the whole re-teach from noise.
+  const timingById = new Map<string, ItemTiming>();
+  if (Object.keys(secondsIn).length) {
+    for (const it of assessment.items) {
+      const g = byIdEarly0.get(it.id);
+      timingById.set(
+        it.id,
+        judgeTiming({ item: it, seconds: Number(secondsIn[it.id]) || 0, correct: g?.correct ?? false })
+      );
+    }
+  }
 
   // 3. Diagnose every WRONG item: name the misconception behind the answer.
   //    This is the signal the remediation loop reasons over, so it covers
   //    auto-graded items too (an MCQ distractor is often the clearest tell).
-  const byIdEarly = new Map(perItem.map((p) => [p.itemId, p]));
-  const wrong = assessment.items.filter((it) => byIdEarly.get(it.id) && !byIdEarly.get(it.id)!.correct);
+  const byIdEarly = byIdEarly0;
+  const wrong = assessment.items.filter((it) => {
+    const g = byIdEarly.get(it.id);
+    if (!g || g.correct) return false;
+    // Skip non-attempts: they carry no information about what the learner believes.
+    return !timingById.get(it.id)?.discardAsEvidence;
+  });
   if (wrong.length) {
     const payload = wrong
       .map((it) => {
@@ -408,6 +441,8 @@ export async function gradeAssessment(input: {
       hintsUsed: g?.hintsUsed ?? 0,
       errorType: g?.errorType,
       hadVisual: !!it.visual,
+      seconds: timingById.get(it.id)?.seconds,
+      timing: timingById.get(it.id)?.verdict,
     };
   });
 
@@ -430,6 +465,15 @@ export async function gradeAssessment(input: {
     effective: Math.round((credited / total) * 100),
   };
 
+  for (const g of perItem) {
+    const t = timingById.get(g.itemId);
+    if (t) {
+      g.seconds = t.seconds;
+      g.timing = t.verdict;
+    }
+  }
+  const fluency = timingById.size ? fluencyFrom([...timingById.values()], overall) : undefined;
+
   return {
     perItem,
     perAspect,
@@ -438,6 +482,7 @@ export async function gradeAssessment(input: {
     weakAspects,
     evidence,
     mastery,
+    fluency,
     summary: passed
       ? "Strong understanding across every aspect."
       : `Needs work on: ${weakAspects.join(", ") || "some aspects"}.`,

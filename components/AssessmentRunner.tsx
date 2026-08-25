@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { AssessmentItemType, QuizOption } from "@/lib/types";
 import type { ItemVisual } from "@/lib/visuals";
 import ItemVisualFigure from "@/components/ItemVisual";
@@ -21,9 +21,18 @@ export interface PublicItem {
   hints?: string[];
 }
 
+export interface SubmitMeta {
+  /** Hints revealed per item id. */
+  hintsUsed: Record<string, number>;
+  /** ACTIVE seconds per item id (idle and backgrounded time excluded). */
+  seconds: Record<string, number>;
+  /** Active seconds across the whole assessment. */
+  totalSeconds: number;
+}
+
 interface Props {
   items: PublicItem[];
-  onSubmit: (answers: Record<string, unknown>, hintsUsed: Record<string, number>) => void;
+  onSubmit: (answers: Record<string, unknown>, meta: SubmitMeta) => void;
   submitting?: boolean;
   submitLabel?: string;
   title?: string;
@@ -50,6 +59,64 @@ export default function AssessmentRunner({ items, onSubmit, submitting, submitLa
 
   const revealHint = (id: string, total: number) =>
     setHintsShown((h) => ({ ...h, [id]: Math.min(total, (h[id] ?? 0) + 1) }));
+
+  // ---- silent response timing ------------------------------------------------
+  // Time is measured but NEVER shown as a countdown: time pressure raises
+  // anxiety, and anxiety degrades mathematics performance specifically. We
+  // accrue time only to the question actually on screen, and only while the
+  // learner is present, so a backgrounded tab or a child leaving the room does
+  // not turn into a 400 second "answer".
+  const msRef = useRef<Record<string, number>>({});
+  const activeIdRef = useRef<string | null>(null);
+  const lastActivityRef = useRef<number>(Date.now());
+  const itemRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+  useEffect(() => {
+    const IDLE_MS = 45_000; // no interaction for this long: stop counting
+    const bump = () => (lastActivityRef.current = Date.now());
+    const events: (keyof WindowEventMap)[] = ["pointerdown", "keydown", "wheel", "touchstart", "mousemove"];
+    events.forEach((e) => window.addEventListener(e, bump, { passive: true }));
+
+    let last = Date.now();
+    const tick = window.setInterval(() => {
+      const now = Date.now();
+      const delta = now - last;
+      last = now;
+      const present = document.visibilityState === "visible";
+      const active = now - lastActivityRef.current < IDLE_MS;
+      const id = activeIdRef.current;
+      if (present && active && id) msRef.current[id] = (msRef.current[id] ?? 0) + delta;
+    }, 1000);
+
+    // Attribute time to whichever question is most in view.
+    const io = new IntersectionObserver(
+      (entries) => {
+        const best = entries
+          .filter((e) => e.isIntersecting)
+          .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+        if (best) activeIdRef.current = (best.target as HTMLElement).dataset.itemId ?? null;
+      },
+      { threshold: [0.25, 0.5, 0.75], rootMargin: "-15% 0px -35% 0px" }
+    );
+    Object.values(itemRefs.current).forEach((el) => el && io.observe(el));
+
+    return () => {
+      events.forEach((e) => window.removeEventListener(e, bump));
+      window.clearInterval(tick);
+      io.disconnect();
+    };
+  }, [items]);
+
+  function collectMeta(): SubmitMeta {
+    const seconds: Record<string, number> = {};
+    let total = 0;
+    for (const it of items) {
+      const sec = Math.round((msRef.current[it.id] ?? 0) / 1000);
+      seconds[it.id] = sec;
+      total += sec;
+    }
+    return { hintsUsed: hintsShown, seconds, totalSeconds: total };
+  }
 
   const set = (id: string, v: unknown) => setAnswers((a) => ({ ...a, [id]: v }));
 
@@ -84,7 +151,14 @@ export default function AssessmentRunner({ items, onSubmit, submitting, submitLa
         {items.map((it, i) => {
           const a = answers[it.id];
           return (
-            <div key={it.id} className="assess-item">
+            <div
+              key={it.id}
+              className="assess-item"
+              data-item-id={it.id}
+              ref={(el) => {
+                itemRefs.current[it.id] = el;
+              }}
+            >
               <div className="ai-top">
                 <span className="ai-num">{i + 1}</span>
                 <span className="ai-kind">{TYPE_LABEL[it.type]}</span>
@@ -180,7 +254,7 @@ export default function AssessmentRunner({ items, onSubmit, submitting, submitLa
 
       <div className="assess-foot">
         <span className="assess-progress">{answered}/{items.length} answered</span>
-        <button className="send big" onClick={() => onSubmit(answers, hintsShown)} disabled={submitting || answered === 0}>
+        <button className="send big" onClick={() => onSubmit(answers, collectMeta())} disabled={submitting || answered === 0}>
           {submitting ? "Grading…" : submitLabel ?? "Submit"}
         </button>
       </div>

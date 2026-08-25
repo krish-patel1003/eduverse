@@ -94,7 +94,8 @@ export async function POST(req: NextRequest) {
     if (!session || !assessment) return NextResponse.json({ error: "Session not found" }, { status: 404 });
 
     const hintsUsed = (body?.hintsUsed && typeof body.hintsUsed === "object" ? body.hintsUsed : {}) as Record<string, number>;
-    const result = await gradeAssessment({ assessment, answers, hintsUsed });
+    const seconds = (body?.seconds && typeof body.seconds === "object" ? body.seconds : {}) as Record<string, number>;
+    const result = await gradeAssessment({ assessment, answers, hintsUsed, seconds });
 
     // Record the outcome on the latest round.
     const rounds = [...session.rounds];
@@ -110,6 +111,9 @@ export async function POST(req: NextRequest) {
       last.evidence = result.evidence ?? [];
       last.hintsUsed = result.mastery?.hintsUsed ?? 0;
       last.independent = result.mastery?.independent;
+      last.pace = result.fluency?.pace;
+      last.needsSpeedWork = result.fluency?.needsSpeedWork;
+      last.totalSeconds = result.fluency?.totalSeconds ?? (Number(body?.totalSeconds) || undefined);
       last.misconceptions = [
         ...new Set((result.evidence ?? []).map((e) => e.misconception).filter((m): m is string => !!m)),
       ];
@@ -178,6 +182,7 @@ export async function POST(req: NextRequest) {
       weakAspects: result.weakAspects,
       summary: result.summary,
       mastery: result.mastery,
+      fluency: result.fluency,
       reward,
       progress,
     });

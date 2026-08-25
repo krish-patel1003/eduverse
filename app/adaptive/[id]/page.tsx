@@ -4,7 +4,7 @@ import { use, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import AppNav from "@/components/AppNav";
 import ExplainerPlayer from "@/components/ExplainerPlayer";
-import AssessmentRunner, { type PublicItem } from "@/components/AssessmentRunner";
+import AssessmentRunner, { type PublicItem, type SubmitMeta } from "@/components/AssessmentRunner";
 import LessonFeedback from "@/components/LessonFeedback";
 import ModePicker from "@/components/ModePicker";
 import {
@@ -208,14 +208,21 @@ export default function AdaptiveLoopPage({ params }: { params: Promise<{ id: str
     }
   }
 
-  async function submitAssessment(answers: Record<string, unknown>, hintsUsed: Record<string, number> = {}) {
+  async function submitAssessment(answers: Record<string, unknown>, meta: SubmitMeta) {
     setPhase("assessLoading");
     setError(null);
     try {
       const res = await fetch("/api/adaptive/assess", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId: sessionId || sessionId2, answers, hintsUsed, retryOf }),
+        body: JSON.stringify({
+          sessionId: sessionId || sessionId2,
+          answers,
+          hintsUsed: meta.hintsUsed,
+          seconds: meta.seconds,
+          totalSeconds: meta.totalSeconds,
+          retryOf,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error ?? "Grading failed");

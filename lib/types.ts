@@ -416,6 +416,8 @@ export interface AssessmentItem {
    * answer reached with hints is NOT counted as independent mastery.
    */
   hints?: string[];
+  /** How long this should reasonably take, in seconds (model estimate). */
+  expectedSeconds?: number;
 }
 
 export interface Assessment {
@@ -447,6 +449,10 @@ export interface AssessmentItemGrade {
   hintsUsed?: number;
   /** What kind of error this was, for choosing the teaching method. */
   errorType?: ErrorType;
+  /** Active seconds spent on this item. */
+  seconds?: number;
+  /** How that time reads given whether the answer was correct. */
+  timing?: string;
   itemId: string;
   correct: boolean;
   /** 0..100. */
@@ -474,6 +480,10 @@ export interface AnswerEvidence {
   errorType?: ErrorType;
   /** Whether the question carried a figure, for the visual-learner prior. */
   hadVisual?: boolean;
+  /** Active seconds spent on this item. */
+  seconds?: number;
+  /** rapid_guess | fluent | expected | effortful | struggled | abandoned. */
+  timing?: string;
   aspect: string;
   type: AssessmentItemType;
   question: string;
@@ -492,6 +502,15 @@ export interface AssessmentResult {
   evidence?: AnswerEvidence[];
   /** Raw vs independent vs hint-discounted score, for judging real mastery. */
   mastery?: { raw: number; independent: number; hintsUsed: number; effective: number };
+  /** Speed picture. Separate from mastery on purpose: accuracy first, then speed. */
+  fluency?: {
+    pace: number;
+    fluentPct: number;
+    effortfulPct: number;
+    rapidGuesses: number;
+    totalSeconds: number;
+    needsSpeedWork: boolean;
+  };
   perAspect: { aspect: string; score: number }[];
   /** 0..100 overall. */
   overall: number;

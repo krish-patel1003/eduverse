@@ -163,6 +163,11 @@ export async function POST(req: NextRequest) {
     // exactly what focused practice fixes. Falls back to the old score band when
     // no hint data was recorded.
     const needsFluency = (() => {
+      // Strongest evidence first: they are answering correctly but slowly, which
+      // is precisely what focused practice fixes. Note this deliberately requires
+      // accuracy to already be there, so a struggling learner is never pushed
+      // into speed drills instead of being taught.
+      if (lastRound?.needsSpeedWork) return true;
       const raw = lastRound?.overall ?? 0;
       const indep = lastRound?.independent;
       const hints = lastRound?.hintsUsed ?? 0;

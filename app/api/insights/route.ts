@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { currentUserId, currentStudentId } from "@/lib/auth";
 import { effectivenessOverview } from "@/lib/effectiveness";
 import { getChild, getHiFi } from "@/lib/children";
-import { listWeakAreas } from "@/lib/adaptive";
+import { listWeakAreas, speedBySkill } from "@/lib/adaptive";
 import { ladderGraphStats } from "@/lib/diagnose";
 import { METHOD_LABEL, MODE_EMOJI, MODE_LABEL } from "@/lib/pedagogy";
 
@@ -31,6 +31,7 @@ export async function GET(req: NextRequest) {
     child: getChild(studentId),
     hifi: getHiFi(studentId),
     skills,
+    speed: speedBySkill(studentId),
     summary: {
       tracked: areas.length,
       mastered: areas.filter((a) => a.status === "mastered").length,
