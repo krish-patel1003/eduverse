@@ -209,6 +209,9 @@ export function getDiagnosticAssessment(id: string): { studentId: string; assess
 
 export function saveDiagnosticResult(id: string, result: AssessmentResult, rank: string): void {
   db()
+    .prepare(`UPDATE diagnostics SET evidence = ? WHERE id = ?`)
+    .run(JSON.stringify(result.evidence ?? []), id);
+  db()
     .prepare(
       `UPDATE diagnostics SET answers = ?, per_aspect = ?, overall = ?, rank = ?, status = 'graded' WHERE id = ?`
     )
@@ -405,4 +408,48 @@ export function getSessionAssessment(sessionId: string): Assessment | null {
     )
     .get(`${sessionId}#%`) as { data: string } | undefined;
   return r ? parseJson<Assessment>(r.data, {} as Assessment) : null;
+}
+
+// ---- adaptive placement state ----------------------------------------------
+
+/** Carry the staged-probing state across a diagnostic's stages. */
+export function savePlacement(diagnosticId: string, state: unknown, workingBand?: string): void {
+  db()
+    .prepare(`UPDATE diagnostics SET placement = ?, working_band = COALESCE(?, working_band) WHERE id = ?`)
+    .run(JSON.stringify(state), workingBand ?? null, diagnosticId);
+}
+
+export function getPlacement<T>(diagnosticId: string): T | null {
+  const r = db().prepare(`SELECT placement FROM diagnostics WHERE id = ?`).get(diagnosticId) as
+    | { placement: string | null }
+    | undefined;
+  return r?.placement ? parseJson<T | null>(r.placement, null) : null;
+}
+
+/** Replace the stored assessment for a diagnostic (each probe is a new stage). */
+export function replaceDiagnosticAssessment(diagnosticId: string, assessment: Assessment): void {
+  db().prepare(`UPDATE diagnostics SET items = ? WHERE id = ?`).run(JSON.stringify(assessment), diagnosticId);
+}
+
+export function getWorkingBand(diagnosticId: string): string | null {
+  const r = db().prepare(`SELECT working_band FROM diagnostics WHERE id = ?`).get(diagnosticId) as
+    | { working_band: string | null }
+    | undefined;
+  return r?.working_band ?? null;
+}
+
+/**
+ * Evidence from this learner's most recent graded diagnostic on a topic. Used
+ * ONLY for the cold-start method prior: it describes how they answer, which
+ * transfers across skills, unlike the answers themselves.
+ */
+export function latestDiagnosticEvidence(studentId: string, topic: string): AnswerEvidence[] {
+  const r = db()
+    .prepare(
+      `SELECT evidence FROM diagnostics
+        WHERE student_id = ? AND topic = ? AND status = 'graded' AND evidence IS NOT NULL
+        ORDER BY created_at DESC LIMIT 1`
+    )
+    .get(studentId, topic) as { evidence: string } | undefined;
+  return r ? parseJson<AnswerEvidence[]>(r.evidence, []) : [];
 }

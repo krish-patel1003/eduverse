@@ -195,6 +195,12 @@ export interface RouteInput {
   alreadyTried?: { mode: ConcreteMode; method: TeachingMethod }[];
   /** What has historically worked for THIS child on THIS skill. */
   bestForSkill?: { mode: ConcreteMode; method: TeachingMethod } | null;
+  /**
+   * A starting hypothesis read from how the learner ANSWERED (figures helped,
+   * could recognise but not produce, and so on). Used when there is no history
+   * for this skill yet, which is exactly the cold-start case.
+   */
+  prior?: { mode: ConcreteMode; method: TeachingMethod; reason: string; confidence: number } | null;
 }
 
 export interface Route {
@@ -274,6 +280,17 @@ export function routeTeaching(input: RouteInput): Route {
   if (input.bestForSkill && !usedMethods.has(input.bestForSkill.method)) {
     const { mode, method } = input.bestForSkill;
     return { mode, method, rationale: "Using the approach that has worked best for you on this skill.", auto: true };
+  }
+
+  // No history for this skill yet, but the way they answered is evidence. This
+  // is what turns the first lesson from a default into an informed guess.
+  if (input.prior && !usedMethods.has(input.prior.method)) {
+    return {
+      mode: input.prior.mode,
+      method: input.prior.method,
+      rationale: `Starting here because ${input.prior.reason}.`,
+      auto: true,
+    };
   }
 
   // First contact with a skill: see it before formalizing it.

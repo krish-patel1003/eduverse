@@ -17,6 +17,7 @@ import type {
   AssessmentItemGrade,
   AssessmentItemType,
   AssessmentResult,
+  ErrorType,
   QuizOption,
 } from "./types";
 
@@ -35,6 +36,10 @@ const ITEM_TYPES: AssessmentItemType[] = [
   "math_multistep",
 ];
 const AUTO_TYPES = new Set<AssessmentItemType>(["mcq", "multi_mcq", "fill_blank"]);
+const ERROR_TYPES = new Set<string>([
+  "procedural_slip", "concept_gap", "prerequisite_gap",
+  "cannot_justify", "transfer_failure", "notation_error", "guessing",
+]);
 
 function stripDashes(s: string): string {
   return s.replace(/\s*—\s*/g, ", ").replace(/\s*–\s*/g, "-").replace(/\s{2,}/g, " ").trim();
@@ -56,9 +61,11 @@ const DOMAIN_GUIDE: Record<AssessmentDomain, string> = {
     `Use mostly mcq and multi_mcq, plus a few short_answer items. Keep it broad.`,
 };
 
-function spec(mode: "diagnostic" | "thorough", level?: string): string {
+function spec(mode: "diagnostic" | "thorough" | "probe", level?: string, probeSize = 5): string {
   const shape =
-    mode === "diagnostic"
+    mode === "probe"
+      ? `Build a SHORT PLACEMENT PROBE of exactly ${probeSize} items, all pitched squarely at the stated grade band. Spread them across the most important DIFFERENT sub-aspects of the topic at that band, one item per aspect, so a single probe reveals breadth rather than depth. Make them representative of what a learner at this exact band is expected to do, neither the easiest nor the hardest examples. Prefer mcq and short_answer so the probe is quick to answer.`
+      : mode === "diagnostic"
       ? `Build an EXHAUSTIVE diagnostic that covers EVERY important sub-aspect of the topic for this education level. 14 to 20 items. Lean on mcq/multi_mcq with a few short_answer, but still include the domain's hands-on types where they reveal understanding.`
       : `Build a THOROUGH check of the specific aspect(s) taught. 5 to 8 items that together test every aspect deeply, using the domain's hands-on item types (not just MCQ).`;
   return `You are an expert assessment designer. ${shape}
@@ -154,16 +161,23 @@ function normItem(raw: unknown): AssessmentItem | null {
 export async function generateAssessment(input: {
   topic: string;
   level?: string;
-  mode: "diagnostic" | "thorough";
+  mode: "diagnostic" | "thorough" | "probe";
   aspects?: string[];
   priorMistakes?: string[];
+  /** Item count for a placement probe. */
+  probeSize?: number;
+  /** Aspects already probed, so a later stage asks about different things. */
+  avoidAspects?: string[];
 }): Promise<Assessment> {
   let text = `TOPIC: ${input.topic}\nEDUCATION LEVEL: ${input.level || "unspecified"}`;
   if (input.aspects?.length) text += `\nFOCUS ASPECTS (cover each): ${input.aspects.join(", ")}`;
   if (input.priorMistakes?.length)
     text += `\nThe learner previously struggled with: ${input.priorMistakes.join("; ")}. Probe these harder.`;
 
-  const raw = (await callGemini(spec(input.mode, input.level), [{ text }])) as Record<string, unknown>;
+  if (input.avoidAspects?.length)
+    text += `\nALREADY ASKED (choose different sub-aspects): ${input.avoidAspects.join(", ")}`;
+
+  const raw = (await callGemini(spec(input.mode, input.level, input.probeSize), [{ text }])) as Record<string, unknown>;
   const domain = DOMAINS.includes(raw.domain as AssessmentDomain) ? (raw.domain as AssessmentDomain) : "general";
   const generated = (Array.isArray(raw.items) ? raw.items : []).map(normItem).filter((x): x is AssessmentItem => !!x);
 
@@ -242,8 +256,17 @@ Think about what belief or missing skill would produce exactly that answer.
 
 Also name the single PREREQUISITE SKILL the learner is missing, phrased as something teachable (e.g. "regrouping ones into tens", "single digit addition facts to 10").
 
+Also classify the ERROR TYPE, which is what decides HOW we re-teach. Pick exactly one:
+- "procedural_slip": they know the method, they slipped executing it
+- "concept_gap": they do not understand what the operation actually means
+- "prerequisite_gap": an earlier, lower skill is missing
+- "cannot_justify": the answer is right or nearly right but the reasoning is absent or wrong
+- "transfer_failure": routine versions would be fine, this novel version defeated them
+- "notation_error": they understand it but wrote or formatted it incorrectly
+- "guessing": there is no discernible method at all
+
 Output ONLY this JSON:
-{ "diagnoses": [ { "id": string, "misconception": string, "missingSkill": string } ] }`;
+{ "diagnoses": [ { "id": string, "misconception": string, "missingSkill": string, "errorType": string } ] }`;
 
 export interface MasterySignal {
   /** Raw percentage correct. */
@@ -344,6 +367,7 @@ export async function gradeAssessment(input: {
         const g = byIdEarly.get(it.id)!;
         if (typeof d.misconception === "string") g.misconception = stripDashes(d.misconception.trim()).slice(0, 240);
         if (typeof d.missingSkill === "string") g.missingSkill = stripDashes(d.missingSkill.trim()).slice(0, 120);
+        if (typeof d.errorType === "string" && ERROR_TYPES.has(d.errorType)) g.errorType = d.errorType as ErrorType;
       }
     } catch {
       /* diagnosis is best-effort; grading still stands */
@@ -382,6 +406,8 @@ export async function gradeAssessment(input: {
       misconception: g?.misconception,
       missingSkill: g?.missingSkill,
       hintsUsed: g?.hintsUsed ?? 0,
+      errorType: g?.errorType,
+      hadVisual: !!it.visual,
     };
   });
 

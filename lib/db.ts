@@ -240,6 +240,14 @@ function migrate(db: Database.Database): void {
   addCol("students", "last_active_at", "last_active_at INTEGER");
   // Opt-in to the slower, higher-fidelity drawn lessons in the adaptive loop.
   addCol("students", "hifi", "hifi INTEGER NOT NULL DEFAULT 0");
+  // Adaptive placement: staged probing state carried across a diagnostic, plus
+  // the working band it converged on (which may differ from the stated grade).
+  addCol("diagnostics", "placement", "placement TEXT");
+  addCol("diagnostics", "working_band", "working_band TEXT");
+  // Per-item evidence from the diagnostic. Not for re-diagnosis (the skill
+  // context differs) but for the cold-start method prior, which is about HOW the
+  // learner answers rather than what they answered about.
+  addCol("diagnostics", "evidence", "evidence TEXT");
   // Backfill: every existing account's self-student becomes its own first child.
   db.exec(`UPDATE students SET owner_id = id WHERE owner_id IS NULL AND id IN (SELECT id FROM users)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_students_owner ON students (owner_id)`);

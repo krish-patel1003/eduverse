@@ -429,9 +429,24 @@ export interface Assessment {
 }
 
 /** Per-item grade after submission. */
+/**
+ * What KIND of error this was. Free-text misconceptions describe the mistake;
+ * the type says what to DO about it, which is what the router needs.
+ */
+export type ErrorType =
+  | "procedural_slip"   // knows the method, slipped in execution
+  | "concept_gap"       // does not understand what the operation means
+  | "prerequisite_gap"  // a lower skill is missing
+  | "cannot_justify"    // right answer, absent or wrong reasoning
+  | "transfer_failure"  // fine on routine items, fails novel ones
+  | "notation_error"    // understands, writes it incorrectly
+  | "guessing";         // no discernible method
+
 export interface AssessmentItemGrade {
   /** How many hints the learner revealed before answering. */
   hintsUsed?: number;
+  /** What kind of error this was, for choosing the teaching method. */
+  errorType?: ErrorType;
   itemId: string;
   correct: boolean;
   /** 0..100. */
@@ -455,6 +470,10 @@ export interface AssessmentItemGrade {
 export interface AnswerEvidence {
   /** How many hints were revealed on this item. */
   hintsUsed?: number;
+  /** What kind of error this was. */
+  errorType?: ErrorType;
+  /** Whether the question carried a figure, for the visual-learner prior. */
+  hadVisual?: boolean;
   aspect: string;
   type: AssessmentItemType;
   question: string;
