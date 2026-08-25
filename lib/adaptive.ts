@@ -256,6 +256,12 @@ export interface AdaptiveRound {
   hintsUsed?: number;
   /** Percentage answered correctly with no hints at all. */
   independent?: number;
+  /** Median taken/expected time across genuinely attempted items. */
+  pace?: number;
+  /** True when accuracy is there but speed is not. */
+  needsSpeedWork?: boolean;
+  /** Active seconds across the whole attempt. */
+  totalSeconds?: number;
   /** The learner's end-of-lesson feedback on this round's video. */
   feedback?: RoundFeedback;
   at: number;
@@ -452,4 +458,38 @@ export function latestDiagnosticEvidence(studentId: string, topic: string): Answ
     )
     .get(studentId, topic) as { evidence: string } | undefined;
   return r ? parseJson<AnswerEvidence[]>(r.evidence, []) : [];
+}
+
+/**
+ * Per-skill speed picture from recorded attempts, for the parent view. Only
+ * counts attempts where accuracy was already reasonable, because speed on
+ * material the learner cannot yet do is not a meaningful number.
+ */
+export function speedBySkill(
+  studentId = DEFAULT_STUDENT
+): { skill: string; pace: number; attempts: number; totalSeconds: number; needsSpeedWork: boolean }[] {
+  const rows = db()
+    .prepare(`SELECT rounds FROM adaptive_sessions WHERE student_id = ?`)
+    .all(studentId) as { rounds: string }[];
+  const acc = new Map<string, { paces: number[]; secs: number; flag: boolean }>();
+  for (const r of rows) {
+    for (const round of parseJson<AdaptiveRound[]>(r.rounds, [])) {
+      if (typeof round.pace !== "number" || !round.taughtSkill) continue;
+      if ((round.overall ?? 0) < 60) continue; // speed is only meaningful once it is mostly right
+      const cur = acc.get(round.taughtSkill) ?? { paces: [], secs: 0, flag: false };
+      cur.paces.push(round.pace);
+      cur.secs += round.totalSeconds ?? 0;
+      cur.flag = cur.flag || !!round.needsSpeedWork;
+      acc.set(round.taughtSkill, cur);
+    }
+  }
+  return [...acc.entries()]
+    .map(([skill, v]) => ({
+      skill,
+      pace: Math.round((v.paces.reduce((a, b) => a + b, 0) / v.paces.length) * 100) / 100,
+      attempts: v.paces.length,
+      totalSeconds: v.secs,
+      needsSpeedWork: v.flag,
+    }))
+    .sort((a, b) => b.pace - a.pace);
 }

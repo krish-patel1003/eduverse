@@ -1260,3 +1260,4 @@ body {
 .place-seg.done { background: #34d399; }
 .place-seg.now { background: var(--accent); }
 .place-reason { margin-top: 10px; font-size: 13px; color: var(--muted); line-height: 1.5; }
+.ins-row.speed { border-bottom: 1px solid var(--border); }

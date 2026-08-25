@@ -16,10 +16,13 @@ interface Stat {
   methodLabel: string;
 }
 interface SkillRow { skill: string; topic?: string; stats: Stat[] }
+interface SpeedRow { skill: string; pace: number; attempts: number; totalSeconds: number; needsSpeedWork: boolean }
+
 interface Data {
   child: { name: string; avatar: string; educationLevel?: string } | null;
   hifi: boolean;
   skills: SkillRow[];
+  speed?: SpeedRow[];
   summary: { tracked: number; mastered: number; learning: number; weak: number; graph: { rows: number; totalUses: number } };
 }
 
@@ -85,6 +88,34 @@ export default function InsightsPage() {
             <span className="toggle-knob" />
           </button>
         </section>
+
+        {(data.speed?.length ?? 0) > 0 && (
+          <section className="hub-section">
+            <h2>Speed</h2>
+            <p className="muted ins-note">
+              How long answers take compared with what the question should need. This only appears once the answers
+              are mostly right, because speed on material a learner cannot yet do is not a meaningful number. A child
+              is never shown a timer.
+            </p>
+            {data.speed!.map((sp) => {
+              const cls = sp.pace <= 0.8 ? "good" : sp.pace <= 1.6 ? "mid" : "bad";
+              const label = sp.pace <= 0.8 ? "quick and automatic" : sp.pace <= 1.6 ? "steady" : "accurate but slow";
+              return (
+                <div key={sp.skill} className="ins-row speed">
+                  <span className="ins-mode">{humanizeSkill(sp.skill)}</span>
+                  <span className="ins-method">{label}</span>
+                  <span className="ins-bar">
+                    <span className={cls} style={{ width: `${Math.min(100, Math.round((sp.pace / 2.5) * 100))}%` }} />
+                  </span>
+                  <span className="ins-rate">{sp.pace}×</span>
+                  <span className="ins-n">
+                    {sp.needsSpeedWork ? "drill speed" : `${sp.attempts} ${sp.attempts === 1 ? "try" : "tries"}`}
+                  </span>
+                </div>
+              );
+            })}
+          </section>
+        )}
 
         <section className="hub-section">
           <h2>What actually works for this learner</h2>
