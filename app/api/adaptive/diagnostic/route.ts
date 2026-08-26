@@ -3,6 +3,8 @@ import { generateAssessment } from "@/lib/assessment";
 import { createDiagnostic, savePlacement } from "@/lib/adaptive";
 import { currentUserId, currentStudentId } from "@/lib/auth";
 import { getEducationLevel } from "@/lib/profile";
+import { getStandard } from "@/lib/standards";
+import type { Band } from "@/lib/gradeband";
 import { PROBE_SIZE, MAX_STAGES, bandLabel, progress, startPlacement } from "@/lib/placement";
 import type { AssessmentItem } from "@/lib/types";
 
@@ -37,7 +39,11 @@ export async function POST(req: NextRequest) {
     const topic = String(body?.topic ?? "").trim();
     if (!topic) return NextResponse.json({ error: "Name a topic you struggle with." }, { status: 400 });
 
-    const level = getEducationLevel(studentId);
+    // A standard chosen from the curriculum pins both the skill and the grade,
+    // so placement starts from the published sequence rather than a guess.
+    const standardCode = typeof body?.standardCode === "string" ? body.standardCode.trim().slice(0, 20) : "";
+    const std = standardCode ? getStandard(standardCode) : null;
+    const level = std ? bandLabel((std.grade as Band) ?? "4") : getEducationLevel(studentId);
 
     // Adaptive placement: instead of one long test pitched at the grade the
     // learner typed in, ask a SHORT probe and then move up or down a band based

@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import AppNav from "@/components/AppNav";
+import { Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import AssessmentRunner, { type PublicItem, type SubmitMeta } from "@/components/AssessmentRunner";
 import ReportView from "@/components/ReportView";
 
@@ -25,7 +27,7 @@ interface Report {
   summary: string;
 }
 
-export default function OnboardingPage() {
+function OnboardingInner() {
   const router = useRouter();
   const [step, setStep] = useState<Step>("info");
   const [name, setName] = useState("");
@@ -33,6 +35,11 @@ export default function OnboardingPage() {
   const [gender, setGender] = useState("");
   const [education, setEducation] = useState("");
   const [topic, setTopic] = useState("");
+  // A standard chosen from the curriculum arrives as a deep link, so the tutor
+  // starts from a real published skill rather than free text the learner typed.
+  const params = useSearchParams();
+  const [stdCode, setStdCode] = useState("");
+  const [stdGrade, setStdGrade] = useState("");
   const [items, setItems] = useState<PublicItem[]>([]);
   const [diagnosticId, setDiagnosticId] = useState("");
   // Placement runs in short stages. We show which stage we are on and, when the
@@ -79,6 +86,15 @@ export default function OnboardingPage() {
     }
   }
 
+  useEffect(() => {
+    const t = params.get("topic");
+    if (!t) return;
+    setTopic(t);
+    setStdCode(params.get("code") ?? "");
+    setStdGrade(params.get("grade") ?? "");
+    setStep("topic");
+  }, [params]);
+
   async function startDiagnostic() {
     if (!topic.trim()) {
       setError("Name something you find difficult.");
@@ -90,7 +106,7 @@ export default function OnboardingPage() {
       const res = await fetch("/api/adaptive/diagnostic", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ topic: topic.trim() }),
+        body: JSON.stringify({ topic: topic.trim(), standardCode: stdCode || undefined, grade: stdGrade || undefined }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error ?? "Could not build the questionnaire");
@@ -238,5 +254,13 @@ export default function OnboardingPage() {
         {error && step !== "info" && step !== "topic" && <div className="err">{error}</div>}
       </div>
     </div>
+  );
+}
+
+export default function OnboardingPage() {
+  return (
+    <Suspense fallback={<div className="shell"><AppNav /><div className="page"><p className="muted">Loading…</p></div></div>}>
+      <OnboardingInner />
+    </Suspense>
   );
 }
