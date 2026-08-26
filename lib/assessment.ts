@@ -37,6 +37,23 @@ const ITEM_TYPES: AssessmentItemType[] = [
   "math_multistep",
 ];
 const AUTO_TYPES = new Set<AssessmentItemType>(["mcq", "multi_mcq", "fill_blank"]);
+const WORK_IMAGE = /^data:(image\/[a-z+]+);base64,(.+)$/i;
+// Reading handwriting is slower than reading text, but it must not run away.
+const WORK_TIMEOUT_MS = 90_000;
+
+const WORK_SPEC = `You are marking a photo of a learner's HANDWRITTEN WORKING for one problem.
+
+Mark the METHOD, not just the final number. Credit correct reasoning even where
+the final answer is wrong, and say exactly which step went astray. A learner who
+set the problem up correctly and slipped on one subtraction has demonstrated far
+more than one who wrote nothing.
+
+If the handwriting is genuinely unreadable, set "readable" to false and do not
+guess; the learner must never be penalised for messy writing.
+
+Output ONLY this JSON:
+{ "readable": bool, "ok": bool, "score": number(0-100), "feedback": string }`;
+
 const ERROR_TYPES = new Set<string>([
   "procedural_slip", "concept_gap", "prerequisite_gap",
   "cannot_justify", "transfer_failure", "notation_error", "guessing",
@@ -249,6 +266,12 @@ function expectedText(item: AssessmentItem): string {
 
 const GRADE_SPEC = `You are a fair, rigorous grader. For each open item you are given the task, a hidden rubric, and the learner's answer. Grade how well the answer meets the rubric. ${VOICE}
 
+HANDWRITTEN WORKING: some items come with a photo of what the learner wrote by
+hand. When one is present, mark the METHOD shown in the working, not only the
+typed answer. Credit correct reasoning even where the final number is wrong, and
+say in the feedback exactly which step went astray. If the handwriting is genuinely
+unreadable, grade the typed answer and do not penalise the learner for it.
+
 For code: judge correctness and whether it would work, not style. For math_multistep: reward a correct APPROACH and correct steps; do not fail an answer for a tiny arithmetic slip if the method is right. For essays/short answers: judge substance against the rubric, not length.
 
 Output ONLY this JSON:
@@ -298,11 +321,14 @@ export async function gradeAssessment(input: {
   hintsUsed?: Record<string, number>;
   /** ACTIVE seconds per item id, for the timing signal. */
   seconds?: Record<string, number>;
+  /** Handwritten working per item id, as a data URL. */
+  working?: Record<string, string>;
 }): Promise<AssessmentResult> {
   const { assessment, answers } = input;
   const hintsUsed = input.hintsUsed ?? {};
   const hintsFor = (id: string) => Math.max(0, Math.round(Number(hintsUsed[id]) || 0));
   const secondsIn = input.seconds ?? {};
+  const workingIn = input.working ?? {};
   const perItem: AssessmentItemGrade[] = [];
 
   // 1. Auto-grade objective items.
@@ -343,7 +369,9 @@ export async function gradeAssessment(input: {
       const grades = Array.isArray(raw.grades) ? raw.grades : [];
       for (const it of openItems) {
         const g = (grades.find((x) => (x as { id?: string })?.id === it.id) ?? {}) as Record<string, unknown>;
-        const blank = !String(answers[it.id] ?? "").trim();
+        // Working counts as an attempt: a child who wrote it out but typed
+        // nothing has not left the question blank.
+        const blank = !String(answers[it.id] ?? "").trim() && !workingIn[it.id];
         const score = blank ? 0 : typeof g.score === "number" ? Math.max(0, Math.min(100, Math.round(g.score))) : g.ok === true ? 100 : 0;
         perItem.push({
           itemId: it.id,
@@ -355,6 +383,42 @@ export async function gradeAssessment(input: {
     } catch {
       for (const it of openItems) perItem.push({ itemId: it.id, correct: false, score: 0, feedback: "Could not grade this answer." });
     }
+
+    // Handwritten working is graded SEPARATELY, one item at a time. Reading an
+    // image is much slower than reading text, so bundling it into the call above
+    // meant a single slow read stalled grading for every open item. Each pass
+    // here is independently timed and independently allowed to fail: if it does,
+    // the typed grade already computed above simply stands.
+    const withWork = openItems.filter((it) => WORK_IMAGE.test(String(workingIn[it.id] ?? "")));
+    await Promise.all(
+      withWork.map(async (it) => {
+        const m = String(workingIn[it.id]).match(WORK_IMAGE);
+        if (!m) return;
+        try {
+          const raw = (await callGemini(
+            WORK_SPEC,
+            [
+              { text: `Task: ${it.prompt}\nRubric: ${it.rubric ?? ""}\nTyped answer: ${String(answers[it.id] ?? "").trim() || "(none, the working is the answer)"}` },
+              { inlineData: { mimeType: m[1], data: m[2] } },
+            ],
+            WORK_TIMEOUT_MS
+          )) as Record<string, unknown>;
+          const g = perItem.find((p) => p.itemId === it.id);
+          if (!g || raw.readable === false) return;
+          const score = typeof raw.score === "number" ? Math.max(0, Math.min(100, Math.round(raw.score))) : g.score;
+          // Marking the method can only ever help: a child who showed correct
+          // working keeps the better of the two grades.
+          if (score > g.score) {
+            g.score = score;
+            g.correct = raw.ok === true || score >= PASS_PCT;
+          }
+          if (typeof raw.feedback === "string" && raw.feedback.trim())
+            g.feedback = stripDashes(raw.feedback.trim()).slice(0, 500);
+        } catch (err) {
+          console.warn(`working grade failed for ${it.id}:`, (err as Error)?.message);
+        }
+      })
+    );
   }
 
   const byIdEarly0 = new Map(perItem.map((p) => [p.itemId, p]));

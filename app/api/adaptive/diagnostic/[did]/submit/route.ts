@@ -58,7 +58,8 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ did: strin
     const answers = (body?.answers ?? {}) as Record<string, unknown>;
 
     const seconds = (body?.seconds && typeof body.seconds === "object" ? body.seconds : {}) as Record<string, number>;
-    const result = await gradeAssessment({ assessment, answers, seconds });
+    const working = (body?.working && typeof body.working === "object" ? body.working : {}) as Record<string, string>;
+    const result = await gradeAssessment({ assessment, answers, seconds, working });
 
     const placement = getPlacement<PlacementState>(did);
     // No placement state means a legacy one-shot diagnostic; finish it as before.
