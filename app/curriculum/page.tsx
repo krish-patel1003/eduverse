@@ -17,6 +17,15 @@ interface Data {
 
 const label = (g: string) => (g === "K" ? "Kindergarten" : `Grade ${g}`);
 
+// High school standards are published across the whole 9-12 band, not by grade.
+// The grade shown is the typical US course placement, so say which course.
+const HS_COURSE: Record<string, string> = {
+  "9": "Algebra 1",
+  "10": "Geometry",
+  "11": "Algebra 2",
+  "12": "Precalculus",
+};
+
 export default function CurriculumPage() {
   const [grade, setGrade] = useState("4");
   const [data, setData] = useState<Data | null>(null);
@@ -65,10 +74,22 @@ export default function CurriculumPage() {
           onChange={(e) => setQ(e.target.value)}
         />
 
+        {!shown && HS_COURSE[grade] && (
+          <p className="muted cur-course-note">
+            High school standards are published across the whole 9 to 12 band rather than by grade. These are the ones
+            typically taught in <b>{HS_COURSE[grade]}</b>.
+          </p>
+        )}
+
         {!shown && (
           <div className="cur-grades">
             {data.grades.map((g) => (
-              <button key={g} className={`cur-grade ${g === grade ? "on" : ""}`} onClick={() => setGrade(g)}>
+              <button
+                key={g}
+                className={`cur-grade ${g === grade ? "on" : ""} ${HS_COURSE[g] ? "hs" : ""}`}
+                onClick={() => setGrade(g)}
+                title={HS_COURSE[g] ? `${label(g)} · typically ${HS_COURSE[g]}` : label(g)}
+              >
                 {g === "K" ? "K" : g}
               </button>
             ))}

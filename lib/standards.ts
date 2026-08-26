@@ -50,7 +50,7 @@ export function gradesAvailable(subject = "math"): string[] {
   const rows = db()
     .prepare(`SELECT DISTINCT grade FROM standards WHERE subject = ?`)
     .all(subject) as { grade: string }[];
-  const order = ["K", "1", "2", "3", "4", "5", "6", "7", "8"];
+  const order = ["K", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"];
   return rows.map((r) => r.grade).sort((a, b) => order.indexOf(a) - order.indexOf(b));
 }
 
@@ -65,10 +65,16 @@ export function searchStandards(q: string, subject = "math", limit = 12): Standa
 
   // Everyday phrases first: someone typing "long division" means a specific
   // standard, and the published wording will never contain that phrase.
-  const aliasCodes = new Set<string>();
+  // Track how SPECIFIC the matching phrase was. "algebra 2" contains "algebra",
+  // so both fire; without this the broad K-8 alias ties with the precise one and
+  // a Grade 6 standard wins a search for Algebra 2.
+  const aliasScore = new Map<string, number>();
   for (const [phrase, codes] of Object.entries(ALIASES)) {
-    if (phrase.includes(raw) || raw.includes(phrase)) codes.forEach((c) => aliasCodes.add(c));
+    if (!phrase.includes(raw) && !raw.includes(phrase)) continue;
+    const specificity = phrase === raw ? 60 : phrase.length;
+    for (const c of codes) aliasScore.set(c, Math.max(aliasScore.get(c) ?? 0, specificity));
   }
+  const aliasCodes = new Set(aliasScore.keys());
 
   const rows = db()
     .prepare(
@@ -91,7 +97,7 @@ export function searchStandards(q: string, subject = "math", limit = 12): Standa
   // standard buried inside it.
   const score = (r: Standard): number => {
     let n = 0;
-    if (aliasCodes.has(r.code)) n += 100;
+    if (aliasCodes.has(r.code)) n += 100 + (aliasScore.get(r.code) ?? 0);
     if (r.code.toLowerCase() === raw) n += 90;
     if (r.code.toLowerCase().includes(raw)) n += 40;
     if (r.skill.toLowerCase().includes(raw)) n += 30;
@@ -118,7 +124,7 @@ export function standardsStats(): { total: number; grades: number } {
 
 // ---- the published prerequisite ladder --------------------------------------
 
-const GRADE_ORDER = ["K", "1", "2", "3", "4", "5", "6", "7", "8"];
+const GRADE_ORDER = ["K", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"];
 const gradeRank = (g: string) => {
   const i = GRADE_ORDER.indexOf(g);
   return i === -1 ? 99 : i;
