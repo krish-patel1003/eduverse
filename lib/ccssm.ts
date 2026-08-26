@@ -23,7 +23,7 @@ export interface StandardSeed {
 const D = (grade: string, domain: string, cluster: string, rows: [string, string][]): StandardSeed[] =>
   rows.map(([code, skill]) => ({ code, grade, domain, cluster, skill }));
 
-export const CCSSM: StandardSeed[] = [
+export const CCSSM_K8: StandardSeed[] = [
   // ---- Kindergarten ----
   ...D("K", "Counting and Cardinality", "Know number names and the count sequence", [
     ["K.CC.A.1", "Count to 100 by ones and by tens"],
@@ -333,6 +333,167 @@ export const CCSSM: StandardSeed[] = [
   ]),
 ];
 
+/** Everything the spine holds: K-8 plus high school. */
+export const CCSSM: StandardSeed[] = [];
+
+// ---- High school ------------------------------------------------------------
+//
+// CCSS-M does NOT grade-assign high school standards: they are published by
+// conceptual category (Number and Quantity, Algebra, Functions, Geometry,
+// Statistics and Probability) across the whole 9-12 band. The grade here is the
+// TYPICAL US course placement, which is what makes placement, grade-band
+// enforcement and the ladder work consistently with K-8:
+//   9 = Algebra 1, 10 = Geometry, 11 = Algebra 2, 12 = Precalculus and beyond.
+// The codes themselves are the real published ones.
+
+export const CCSSM_HS: StandardSeed[] = [
+  // ---- Grade 9, typically Algebra 1 ----
+  ...D("9", "Number and Quantity", "The Real Number System", [
+    ["HSN.RN.A.1", "Extend exponent rules to rational exponents"],
+    ["HSN.RN.A.2", "Rewrite expressions with radicals and rational exponents"],
+    ["HSN.RN.B.3", "Explain when sums and products of rationals stay rational"],
+  ]),
+  ...D("9", "Number and Quantity", "Quantities", [
+    ["HSN.Q.A.1", "Use units to guide reasoning and interpret formulas"],
+  ]),
+  ...D("9", "Algebra", "Seeing Structure in Expressions", [
+    ["HSA.SSE.A.1", "Interpret the parts of an expression in context"],
+    ["HSA.SSE.A.2", "Rewrite an expression by recognising its structure"],
+    ["HSA.SSE.B.3", "Factor or complete the square to reveal properties"],
+  ]),
+  ...D("9", "Algebra", "Arithmetic with Polynomials", [
+    ["HSA.APR.A.1", "Add, subtract and multiply polynomials"],
+  ]),
+  ...D("9", "Algebra", "Creating Equations", [
+    ["HSA.CED.A.1", "Create equations and inequalities in one variable"],
+    ["HSA.CED.A.2", "Create equations in two variables and graph them"],
+    ["HSA.CED.A.3", "Represent constraints with systems of equations"],
+  ]),
+  ...D("9", "Algebra", "Reasoning with Equations and Inequalities", [
+    ["HSA.REI.A.1", "Justify each step in solving an equation"],
+    ["HSA.REI.B.3", "Solve linear equations and inequalities in one variable"],
+    ["HSA.REI.B.4", "Solve quadratic equations by factoring, completing the square and the formula"],
+    ["HSA.REI.C.6", "Solve systems of linear equations exactly and approximately"],
+    ["HSA.REI.D.10", "Understand a graph as the set of solutions to an equation"],
+    ["HSA.REI.D.12", "Graph the solutions to a linear inequality"],
+  ]),
+  ...D("9", "Functions", "Interpreting Functions", [
+    ["HSF.IF.A.1", "Understand function notation and what a function is"],
+    ["HSF.IF.A.2", "Evaluate functions and interpret them in context"],
+    ["HSF.IF.B.4", "Interpret key features of a graph: intercepts, increase, maxima"],
+    ["HSF.IF.C.7", "Graph functions and show key features"],
+  ]),
+  ...D("9", "Functions", "Building Functions", [
+    ["HSF.BF.A.1", "Write a function that describes a relationship"],
+  ]),
+  ...D("9", "Functions", "Linear, Quadratic and Exponential Models", [
+    ["HSF.LE.A.1", "Tell linear growth from exponential growth"],
+    ["HSF.LE.A.2", "Build linear and exponential functions from data or description"],
+  ]),
+  ...D("9", "Statistics and Probability", "Interpreting Categorical and Quantitative Data", [
+    ["HSS.ID.A.1", "Represent data with dot plots, histograms and box plots"],
+    ["HSS.ID.A.2", "Compare center and spread of two data sets"],
+    ["HSS.ID.B.6", "Fit a function to data and use it to solve problems"],
+    ["HSS.ID.C.7", "Interpret slope and intercept of a linear model in context"],
+  ]),
+
+  // ---- Grade 10, typically Geometry ----
+  ...D("10", "Geometry", "Congruence", [
+    ["HSG.CO.A.1", "Define angle, circle, line, segment and parallel precisely"],
+    ["HSG.CO.A.2", "Represent transformations in the plane"],
+    ["HSG.CO.B.6", "Use rigid motions to decide whether figures are congruent"],
+    ["HSG.CO.C.9", "Prove theorems about lines and angles"],
+    ["HSG.CO.C.10", "Prove theorems about triangles"],
+    ["HSG.CO.D.12", "Make formal geometric constructions"],
+  ]),
+  ...D("10", "Geometry", "Similarity, Right Triangles and Trigonometry", [
+    ["HSG.SRT.A.2", "Decide whether figures are similar using transformations"],
+    ["HSG.SRT.B.5", "Use congruence and similarity criteria to solve problems"],
+    ["HSG.SRT.C.6", "Define the trigonometric ratios from similar right triangles"],
+    ["HSG.SRT.C.7", "Relate the sine and cosine of complementary angles"],
+    ["HSG.SRT.C.8", "Use trigonometric ratios and the Pythagorean theorem in right triangles"],
+  ]),
+  ...D("10", "Geometry", "Circles", [
+    ["HSG.C.A.1", "Prove that all circles are similar"],
+    ["HSG.C.B.5", "Relate arc length and sector area to the radius"],
+  ]),
+  ...D("10", "Geometry", "Expressing Geometric Properties with Equations", [
+    ["HSG.GPE.A.1", "Derive and use the equation of a circle"],
+    ["HSG.GPE.B.5", "Use slope criteria for parallel and perpendicular lines"],
+  ]),
+  ...D("10", "Geometry", "Geometric Measurement and Dimension", [
+    ["HSG.GMD.A.1", "Explain the formulas for circumference, area and volume"],
+    ["HSG.GMD.B.4", "Identify cross sections and solids of revolution"],
+  ]),
+  ...D("10", "Geometry", "Modeling with Geometry", [
+    ["HSG.MG.A.1", "Model real objects with geometric shapes"],
+  ]),
+  ...D("10", "Statistics and Probability", "Conditional Probability", [
+    ["HSS.CP.A.1", "Describe events as subsets of a sample space"],
+    ["HSS.CP.A.4", "Build and interpret two way frequency tables"],
+    ["HSS.CP.B.7", "Apply the addition rule for probability"],
+  ]),
+
+  // ---- Grade 11, typically Algebra 2 ----
+  ...D("11", "Number and Quantity", "The Complex Number System", [
+    ["HSN.CN.A.1", "Understand complex numbers and the imaginary unit"],
+    ["HSN.CN.C.7", "Solve quadratic equations with complex solutions"],
+  ]),
+  ...D("11", "Algebra", "Seeing Structure in Expressions", [
+    ["HSA.SSE.B.4", "Derive and use the formula for a finite geometric series"],
+  ]),
+  ...D("11", "Algebra", "Arithmetic with Polynomials and Rational Expressions", [
+    ["HSA.APR.B.2", "Apply the Remainder Theorem"],
+    ["HSA.APR.B.3", "Use zeros of a polynomial to sketch its graph"],
+    ["HSA.APR.D.6", "Rewrite rational expressions"],
+  ]),
+  ...D("11", "Algebra", "Reasoning with Equations and Inequalities", [
+    ["HSA.REI.A.2", "Solve rational and radical equations and spot extraneous solutions"],
+  ]),
+  ...D("11", "Functions", "Interpreting and Building Functions", [
+    ["HSF.IF.C.8", "Rewrite a function to reveal maxima, minima and rates"],
+    ["HSF.BF.A.2", "Write arithmetic and geometric sequences"],
+    ["HSF.BF.B.3", "Understand how transformations change a graph"],
+    ["HSF.BF.B.4", "Find inverse functions"],
+  ]),
+  ...D("11", "Functions", "Linear, Quadratic and Exponential Models", [
+    ["HSF.LE.A.4", "Use logarithms to solve exponential equations"],
+  ]),
+  ...D("11", "Functions", "Trigonometric Functions", [
+    ["HSF.TF.A.1", "Understand radian measure"],
+    ["HSF.TF.A.2", "Extend trigonometric functions using the unit circle"],
+    ["HSF.TF.B.5", "Model periodic phenomena with trigonometric functions"],
+    ["HSF.TF.C.8", "Use and apply the Pythagorean identity"],
+  ]),
+  ...D("11", "Statistics and Probability", "Making Inferences and Justifying Conclusions", [
+    ["HSS.IC.A.1", "Understand statistics as inference about a population"],
+    ["HSS.IC.B.4", "Use sample data to estimate a population mean or proportion"],
+  ]),
+
+  // ---- Grade 12, typically Precalculus and beyond ----
+  ...D("12", "Number and Quantity", "Vector and Matrix Quantities", [
+    ["HSN.VM.A.1", "Understand vectors as quantities with magnitude and direction"],
+    ["HSN.VM.B.4", "Add and subtract vectors"],
+    ["HSN.VM.C.6", "Use matrices to represent and manipulate data"],
+  ]),
+  ...D("12", "Algebra", "Arithmetic with Polynomials", [
+    ["HSA.APR.C.4", "Prove and use polynomial identities"],
+  ]),
+  ...D("12", "Functions", "Trigonometric Functions", [
+    ["HSF.TF.B.7", "Use inverse trigonometric functions to solve equations"],
+  ]),
+  ...D("12", "Geometry", "Expressing Geometric Properties with Equations", [
+    ["HSG.GPE.A.2", "Derive the equation of a parabola"],
+  ]),
+  ...D("12", "Statistics and Probability", "Using Probability to Make Decisions", [
+    ["HSS.MD.A.1", "Define a random variable and graph its distribution"],
+    ["HSS.MD.B.5", "Weigh expected values to make decisions"],
+  ]),
+];
+
+// Assembled after both halves are declared.
+CCSSM.push(...CCSSM_K8, ...CCSSM_HS);
+
 /**
  * Everyday phrases mapped to standards.
  *
@@ -387,6 +548,48 @@ export const ALIASES: Record<string, string[]> = {
   "odd and even": ["2.OA.C.3"],
   "factors": ["4.OA.B.4", "6.NS.B.4"],
   "prime numbers": ["4.OA.B.4"],
+
+  // High school phrases. These matter more than the K-8 ones: nobody searches
+  // "solve quadratic equations by factoring, completing the square and the
+  // formula", they search "quadratic formula".
+  "quadratic formula": ["HSA.REI.B.4"],
+  "quadratics": ["HSA.REI.B.4", "HSA.SSE.B.3"],
+  "factoring": ["HSA.SSE.B.3", "HSA.SSE.A.2"],
+  "completing the square": ["HSA.SSE.B.3", "HSA.REI.B.4"],
+  "polynomials": ["HSA.APR.A.1", "HSA.APR.B.3"],
+  "systems of equations": ["HSA.REI.C.6", "8.EE.C.8"],
+  "inequalities": ["HSA.REI.D.12", "7.EE.B.4"],
+  "slope intercept": ["8.EE.B.5", "HSS.ID.C.7"],
+  "function notation": ["HSF.IF.A.1"],
+  "graphing functions": ["HSF.IF.C.7", "HSF.BF.B.3"],
+  "inverse functions": ["HSF.BF.B.4"],
+  "logarithms": ["HSF.LE.A.4"],
+  "logs": ["HSF.LE.A.4"],
+  "exponential growth": ["HSF.LE.A.1", "HSF.LE.A.2"],
+  "sequences": ["HSF.BF.A.2", "HSA.SSE.B.4"],
+  "complex numbers": ["HSN.CN.A.1", "HSN.CN.C.7"],
+  "imaginary numbers": ["HSN.CN.A.1"],
+  "rational exponents": ["HSN.RN.A.1", "HSN.RN.A.2"],
+  "radicals": ["HSN.RN.A.2", "HSA.REI.A.2"],
+  "trigonometry": ["HSG.SRT.C.6", "HSF.TF.A.2"],
+  "trig": ["HSG.SRT.C.6", "HSF.TF.A.2"],
+  "sohcahtoa": ["HSG.SRT.C.6", "HSG.SRT.C.8"],
+  "unit circle": ["HSF.TF.A.2", "HSF.TF.A.1"],
+  "radians": ["HSF.TF.A.1"],
+  "sine cosine": ["HSF.TF.A.2", "HSG.SRT.C.6"],
+  "geometry proofs": ["HSG.CO.C.9", "HSG.CO.C.10"],
+  "congruence": ["HSG.CO.B.6"],
+  "similarity": ["HSG.SRT.A.2", "HSG.SRT.B.5"],
+  "circle equation": ["HSG.GPE.A.1"],
+  "parabola": ["HSG.GPE.A.2", "HSA.REI.B.4"],
+  "vectors": ["HSN.VM.A.1", "HSN.VM.B.4"],
+  "matrices": ["HSN.VM.C.6"],
+  "standard deviation": ["HSS.ID.A.2"],
+  "line of best fit": ["HSS.ID.B.6", "8.SP.A.2"],
+  "conditional probability": ["HSS.CP.A.1", "HSS.CP.B.7"],
+  "algebra 1": ["HSA.REI.B.3", "HSF.IF.A.1", "HSA.CED.A.1"],
+  "algebra 2": ["HSA.REI.A.2", "HSF.LE.A.4", "HSN.CN.A.1"],
+  "precalculus": ["HSF.TF.A.2", "HSN.VM.A.1"],
 };
 
 /**
@@ -528,3 +731,91 @@ export const PREREQS: Record<string, string[]> = {
   "6.SP.B.5": ["6.SP.B.4"],
   "8.SP.A.2": ["8.SP.A.1", "8.EE.B.5"],
 };
+
+// ---- high school prerequisite edges -----------------------------------------
+// The bridge from Grade 8 into high school matters most: a learner failing
+// Algebra 1 very often has an unfinished Grade 6-8 skill underneath it.
+Object.assign(PREREQS, {
+  // Number and quantity
+  "HSN.RN.A.1": ["8.EE.A.1"],
+  "HSN.RN.A.2": ["HSN.RN.A.1", "8.EE.A.2"],
+  "HSN.RN.B.3": ["HSN.RN.A.1", "8.NS.A.1"],
+  "HSN.CN.A.1": ["HSA.REI.B.4", "8.NS.A.1"],
+  "HSN.CN.C.7": ["HSN.CN.A.1", "HSA.REI.B.4"],
+  "HSN.VM.A.1": ["8.G.A.1", "HSG.SRT.C.6"],
+  "HSN.VM.B.4": ["HSN.VM.A.1"],
+
+  // Algebra
+  "HSA.SSE.A.1": ["6.EE.A.2", "7.EE.A.1"],
+  "HSA.SSE.A.2": ["HSA.SSE.A.1"],
+  "HSA.SSE.B.3": ["HSA.SSE.A.2", "HSA.APR.A.1"],
+  "HSA.SSE.B.4": ["HSF.BF.A.2", "HSA.SSE.B.3"],
+  "HSA.APR.A.1": ["HSA.SSE.A.2", "7.EE.A.1"],
+  "HSA.APR.B.2": ["HSA.APR.A.1"],
+  "HSA.APR.B.3": ["HSA.APR.B.2", "HSA.SSE.B.3"],
+  "HSA.APR.C.4": ["HSA.APR.A.1"],
+  "HSA.APR.D.6": ["HSA.APR.A.1", "6.NS.A.1"],
+  "HSA.CED.A.1": ["7.EE.B.4", "HSA.SSE.A.1"],
+  "HSA.CED.A.2": ["HSA.CED.A.1", "8.F.B.4"],
+  "HSA.CED.A.3": ["HSA.CED.A.2", "HSA.REI.C.6"],
+  "HSA.REI.A.1": ["8.EE.C.7"],
+  "HSA.REI.A.2": ["HSA.APR.D.6", "HSN.RN.A.2"],
+  "HSA.REI.B.3": ["8.EE.C.7"],
+  "HSA.REI.B.4": ["HSA.REI.B.3", "HSA.SSE.B.3"],
+  "HSA.REI.C.6": ["8.EE.C.8", "HSA.REI.B.3"],
+  "HSA.REI.D.10": ["8.F.A.3"],
+  "HSA.REI.D.12": ["HSA.REI.D.10", "7.EE.B.4"],
+
+  // Functions
+  "HSF.IF.A.1": ["8.F.A.1"],
+  "HSF.IF.A.2": ["HSF.IF.A.1"],
+  "HSF.IF.B.4": ["HSF.IF.A.2", "8.F.A.3"],
+  "HSF.IF.C.7": ["HSF.IF.B.4"],
+  "HSF.IF.C.8": ["HSF.IF.C.7", "HSA.SSE.B.3"],
+  "HSF.BF.A.1": ["HSF.IF.A.2", "8.F.B.4"],
+  "HSF.BF.A.2": ["HSF.BF.A.1"],
+  "HSF.BF.B.3": ["HSF.IF.C.7"],
+  "HSF.BF.B.4": ["HSF.IF.A.1", "HSA.REI.B.3"],
+  "HSF.LE.A.1": ["8.F.B.4"],
+  "HSF.LE.A.2": ["HSF.LE.A.1", "HSF.BF.A.1"],
+  "HSF.LE.A.4": ["HSN.RN.A.2", "HSF.LE.A.2"],
+  "HSF.TF.A.1": ["HSG.C.B.5"],
+  "HSF.TF.A.2": ["HSF.TF.A.1", "HSG.SRT.C.6"],
+  "HSF.TF.B.5": ["HSF.TF.A.2", "HSF.BF.B.3"],
+  "HSF.TF.B.7": ["HSF.TF.A.2", "HSF.BF.B.4"],
+  "HSF.TF.C.8": ["HSF.TF.A.2"],
+
+  // Geometry
+  "HSG.CO.A.1": ["4.G.A.1"],
+  "HSG.CO.A.2": ["8.G.A.1"],
+  "HSG.CO.B.6": ["HSG.CO.A.2"],
+  "HSG.CO.C.9": ["8.G.A.5", "HSG.CO.A.1"],
+  "HSG.CO.C.10": ["HSG.CO.C.9"],
+  "HSG.CO.D.12": ["HSG.CO.A.1"],
+  "HSG.SRT.A.2": ["8.G.A.4"],
+  "HSG.SRT.B.5": ["HSG.SRT.A.2", "HSG.CO.B.6"],
+  "HSG.SRT.C.6": ["HSG.SRT.A.2"],
+  "HSG.SRT.C.7": ["HSG.SRT.C.6"],
+  "HSG.SRT.C.8": ["HSG.SRT.C.6", "8.G.B.7"],
+  "HSG.C.A.1": ["HSG.SRT.A.2"],
+  "HSG.C.B.5": ["HSG.C.A.1", "7.G.B.4"],
+  "HSG.GPE.A.1": ["8.G.B.7", "HSA.SSE.B.3"],
+  "HSG.GPE.A.2": ["HSG.GPE.A.1"],
+  "HSG.GPE.B.5": ["8.EE.B.5", "HSG.CO.A.1"],
+  "HSG.GMD.A.1": ["8.G.C.9", "7.G.B.4"],
+  "HSG.GMD.B.4": ["HSG.GMD.A.1"],
+  "HSG.MG.A.1": ["7.G.B.6"],
+
+  // Statistics and probability
+  "HSS.ID.A.1": ["6.SP.B.4"],
+  "HSS.ID.A.2": ["HSS.ID.A.1", "6.SP.B.5"],
+  "HSS.ID.B.6": ["8.SP.A.2"],
+  "HSS.ID.C.7": ["HSS.ID.B.6", "8.EE.B.5"],
+  "HSS.CP.A.1": ["7.SP.C.5"],
+  "HSS.CP.A.4": ["HSS.CP.A.1", "8.SP.A.4"],
+  "HSS.CP.B.7": ["HSS.CP.A.1"],
+  "HSS.IC.A.1": ["7.SP.A.1"],
+  "HSS.IC.B.4": ["HSS.IC.A.1", "HSS.ID.A.2"],
+  "HSS.MD.A.1": ["HSS.CP.A.1", "6.SP.B.5"],
+  "HSS.MD.B.5": ["HSS.MD.A.1"],
+});
