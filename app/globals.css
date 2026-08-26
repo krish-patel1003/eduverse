@@ -1279,3 +1279,25 @@ body {
 .wb-tool:disabled { opacity: .35; cursor: not-allowed; }
 .wb-wrap { width: 100%; }
 .wb-canvas { display: block; width: 100%; touch-action: none; cursor: crosshair; background: #fdfdfa; }
+
+/* ---- curriculum browser ---- */
+.cur-search { width: 100%; padding: 11px 14px; margin-bottom: 14px; border-radius: 12px; border: 1px solid var(--border);
+  background: var(--panel); color: var(--text); font: inherit; font-size: 14px; }
+.cur-search:focus { outline: none; border-color: var(--accent); }
+.cur-grades { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 18px; }
+.cur-grade { min-width: 40px; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--border);
+  background: var(--panel); color: var(--text); cursor: pointer; font-size: 13.5px; font-weight: 600; }
+.cur-grade:hover { border-color: var(--accent); }
+.cur-grade.on { border-color: var(--accent); background: rgba(110,168,254,.16); }
+.cur-domain { margin-bottom: 22px; }
+.cur-domain h2 { font-size: 16px; margin: 0 0 10px; }
+.cur-cluster { margin-bottom: 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--panel); padding: 12px 14px; }
+.cur-cluster-name { font-size: 12.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 8px; }
+.cur-row { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13.5px; }
+.cur-row:last-child { border-bottom: none; }
+.cur-code { flex: 0 0 auto; width: 92px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; color: var(--accent); }
+.cur-skill { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cur-grade-tag { font-size: 11px; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 1px 8px; }
+.cur-row .ghost-btn { flex: 0 0 auto; text-decoration: none; }
+.cur-attrib { font-size: 11.5px; margin-top: 20px; line-height: 1.6; }
+@media (max-width: 640px) { .cur-code { width: 72px; } .cur-row { flex-wrap: wrap; } }

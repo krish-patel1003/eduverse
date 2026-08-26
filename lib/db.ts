@@ -11,6 +11,7 @@
 import Database from "better-sqlite3";
 import { mkdirSync } from "fs";
 import path from "path";
+import { CCSSM } from "./ccssm";
 
 // DATA_DIR lets the deploy point the DB at a writable path (e.g. /tmp on Cloud
 // Run, where Litestream replicates it to GCS). Defaults to ./data locally.
@@ -195,6 +196,19 @@ function migrate(db: Database.Database): void {
       UNIQUE (skill_key, subject, band)
     );
 
+    -- The curriculum spine. "Grade 4 mathematics" as free text is a guess;
+    -- 4.NBT.B.5 is a specific, sequenced, nationally recognised skill a parent
+    -- or teacher can look up.
+    CREATE TABLE IF NOT EXISTS standards (
+      code    TEXT PRIMARY KEY,
+      subject TEXT NOT NULL DEFAULT 'math',
+      grade   TEXT NOT NULL,
+      domain  TEXT NOT NULL,
+      cluster TEXT NOT NULL,
+      skill   TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_standards_grade ON standards (subject, grade);
     CREATE INDEX IF NOT EXISTS idx_teachout_skill ON teaching_outcomes (student_id, skill);
     CREATE INDEX IF NOT EXISTS idx_concepts_student ON concepts (student_id);
     CREATE INDEX IF NOT EXISTS idx_notes_module ON notes (module_id, t_ms);
@@ -251,6 +265,22 @@ function migrate(db: Database.Database): void {
   // Backfill: every existing account's self-student becomes its own first child.
   db.exec(`UPDATE students SET owner_id = id WHERE owner_id IS NULL AND id IN (SELECT id FROM users)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_students_owner ON students (owner_id)`);
+
+  // Seed the curriculum spine. Idempotent: re-running updates the text in place
+  // so edits to the seed file propagate without a migration.
+  try {
+    const ins = db.prepare(
+      `INSERT INTO standards (code, subject, grade, domain, cluster, skill)
+       VALUES (?, 'math', ?, ?, ?, ?)
+       ON CONFLICT(code) DO UPDATE SET grade=excluded.grade, domain=excluded.domain,
+         cluster=excluded.cluster, skill=excluded.skill`
+    );
+    db.transaction(() => {
+      for (const r of CCSSM) ins.run(r.code, r.grade, r.domain, r.cluster, r.skill);
+    })();
+  } catch (err) {
+    console.warn("standards seed skipped:", (err as Error)?.message);
+  }
 
   // Ensure the single implicit student exists.
   db.prepare(
