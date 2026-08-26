@@ -560,6 +560,10 @@ export interface PrereqLadder {
   target: string;
   /** Easiest first, ending just below the target. */
   steps: PrereqStep[];
+  /** "published" walks the real CCSS-M sequence; "generated" was invented. */
+  source?: "published" | "generated";
+  /** The CCSS-M code the ladder was built from, when published. */
+  standardCode?: string;
 }
 
 /**

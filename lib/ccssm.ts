@@ -388,3 +388,143 @@ export const ALIASES: Record<string, string[]> = {
   "factors": ["4.OA.B.4", "6.NS.B.4"],
   "prime numbers": ["4.OA.B.4"],
 };
+
+/**
+ * Prerequisite edges: which standards must be solid before another makes sense.
+ *
+ * CCSS-M publishes the sequence but not explicit prerequisite links, so these
+ * edges encode the well-understood domain progressions. They matter because a
+ * generated ladder is a fresh guess every time, whereas these are fixed,
+ * inspectable, free, and identical for every learner.
+ *
+ * Only edges where the progression is genuinely clear are listed. Anything not
+ * here falls back to generating a ladder, so the map can grow incrementally.
+ */
+export const PREREQS: Record<string, string[]> = {
+  // Place value
+  "1.NBT.B.2": ["K.NBT.A.1", "K.CC.A.1"],
+  "2.NBT.A.1": ["1.NBT.B.2"],
+  "2.NBT.A.4": ["2.NBT.A.1", "1.NBT.B.3"],
+  "4.NBT.A.1": ["2.NBT.A.1"],
+  "4.NBT.A.2": ["4.NBT.A.1", "2.NBT.A.3"],
+  "4.NBT.A.3": ["4.NBT.A.1", "3.NBT.A.1"],
+  "5.NBT.A.1": ["4.NBT.A.1"],
+
+  // Addition and subtraction
+  "1.OA.C.6": ["K.OA.A.5", "K.OA.A.4"],
+  "1.NBT.C.4": ["1.OA.C.6", "1.NBT.B.2"],
+  "2.OA.B.2": ["1.OA.C.6"],
+  "2.NBT.B.5": ["1.NBT.C.4", "2.OA.B.2"],
+  "2.NBT.B.7": ["2.NBT.B.5", "2.NBT.A.1"],
+  "3.NBT.A.2": ["2.NBT.B.7"],
+  "4.NBT.B.4": ["3.NBT.A.2"],
+  "2.OA.A.1": ["1.OA.A.1", "2.NBT.B.5"],
+
+  // Multiplication and division
+  "3.OA.A.1": ["2.OA.C.4"],
+  "3.OA.A.2": ["3.OA.A.1"],
+  "3.OA.A.3": ["3.OA.A.1", "3.OA.A.2"],
+  "3.OA.B.6": ["3.OA.A.2"],
+  "3.OA.C.7": ["3.OA.A.1", "3.OA.B.5"],
+  "3.NBT.A.3": ["3.OA.C.7"],
+  "3.OA.D.8": ["3.OA.A.3", "3.NBT.A.2"],
+  "4.OA.A.1": ["3.OA.A.1"],
+  "4.OA.A.2": ["4.OA.A.1"],
+  "4.OA.A.3": ["3.OA.D.8"],
+  "4.OA.B.4": ["3.OA.C.7"],
+  "4.NBT.B.5": ["3.OA.C.7", "3.NBT.A.3", "4.NBT.A.1"],
+  "4.NBT.B.6": ["3.OA.C.7", "4.NBT.B.5"],
+  "5.NBT.B.5": ["4.NBT.B.5"],
+  "5.NBT.B.6": ["4.NBT.B.6"],
+  "6.NS.B.2": ["5.NBT.B.6"],
+
+  // Fractions
+  "3.NF.A.1": ["2.G.A.3", "1.G.A.3"],
+  "3.NF.A.2": ["3.NF.A.1"],
+  "3.NF.A.3": ["3.NF.A.1"],
+  "3.G.A.2": ["3.NF.A.1"],
+  "4.NF.A.1": ["3.NF.A.3"],
+  "4.NF.A.2": ["4.NF.A.1"],
+  "4.NF.B.3": ["3.NF.A.1"],
+  "4.NF.B.4": ["4.NF.B.3", "3.OA.A.1"],
+  "5.NF.A.1": ["4.NF.A.1", "4.NF.B.3"],
+  "5.NF.A.2": ["5.NF.A.1"],
+  "5.NF.B.3": ["3.OA.A.2", "3.NF.A.1"],
+  "5.NF.B.4": ["4.NF.B.4"],
+  "5.NF.B.6": ["5.NF.B.4"],
+  "5.NF.B.7": ["5.NF.B.4", "3.OA.A.2"],
+  "6.NS.A.1": ["5.NF.B.7"],
+
+  // Decimals
+  "4.NF.C.5": ["4.NF.B.3"],
+  "4.NF.C.6": ["4.NF.C.5", "4.NBT.A.1"],
+  "4.NF.C.7": ["4.NF.C.6"],
+  "5.NBT.A.3": ["4.NF.C.6", "5.NBT.A.1"],
+  "5.NBT.A.4": ["5.NBT.A.3", "4.NBT.A.3"],
+  "5.NBT.B.7": ["5.NBT.A.3", "4.NBT.B.4"],
+  "6.NS.B.3": ["5.NBT.B.7"],
+
+  // Ratio, rate, percent
+  "6.RP.A.1": ["4.OA.A.1", "5.NF.B.4"],
+  "6.RP.A.2": ["6.RP.A.1"],
+  "6.RP.A.3": ["6.RP.A.1", "6.RP.A.2"],
+  "7.RP.A.1": ["6.RP.A.2", "5.NF.B.7"],
+  "7.RP.A.2": ["6.RP.A.2"],
+  "7.RP.A.3": ["6.RP.A.3"],
+
+  // Negative numbers
+  "6.NS.C.5": ["5.G.A.1"],
+  "6.NS.C.6": ["6.NS.C.5"],
+  "6.NS.C.7": ["6.NS.C.6"],
+  "7.NS.A.1": ["6.NS.C.5", "4.NF.B.3"],
+  "7.NS.A.2": ["7.NS.A.1", "3.OA.C.7"],
+  "7.NS.A.3": ["7.NS.A.2"],
+
+  // Expressions and equations
+  "5.OA.A.1": ["3.OA.B.5"],
+  "6.EE.A.1": ["3.OA.C.7"],
+  "6.EE.A.2": ["5.OA.A.1"],
+  "6.EE.A.3": ["6.EE.A.2"],
+  "6.EE.B.7": ["6.EE.A.2", "1.OA.D.8"],
+  "6.EE.C.9": ["6.EE.A.2"],
+  "7.EE.A.1": ["6.EE.A.3", "7.NS.A.2"],
+  "7.EE.B.3": ["7.NS.A.3"],
+  "7.EE.B.4": ["6.EE.B.7", "7.NS.A.2"],
+  "8.EE.C.7": ["7.EE.B.4"],
+  "8.EE.C.8": ["8.EE.C.7"],
+  "8.EE.A.1": ["6.EE.A.1"],
+  "8.EE.A.2": ["8.EE.A.1"],
+  "8.EE.A.3": ["8.EE.A.1", "5.NBT.A.1"],
+  "8.EE.B.5": ["7.RP.A.2", "5.G.A.1"],
+
+  // Functions
+  "8.F.A.1": ["6.EE.C.9"],
+  "8.F.A.2": ["8.F.A.1"],
+  "8.F.A.3": ["8.F.A.1", "8.EE.B.5"],
+  "8.F.B.4": ["8.F.A.3"],
+
+  // Measurement and geometry
+  "2.MD.C.7": ["1.MD.B.3"],
+  "3.MD.A.1": ["2.MD.C.7"],
+  "2.MD.C.8": ["2.NBT.B.5"],
+  "4.MD.A.2": ["2.MD.C.8", "4.OA.A.3"],
+  "3.MD.C.7": ["3.OA.A.1", "3.MD.C.5"],
+  "3.MD.D.8": ["2.MD.B.5"],
+  "4.MD.A.3": ["3.MD.C.7", "3.MD.D.8"],
+  "6.G.A.1": ["4.MD.A.3"],
+  "7.G.B.4": ["6.G.A.1"],
+  "7.G.B.6": ["6.G.A.1", "6.G.A.4"],
+  "5.MD.C.5": ["5.MD.C.3", "3.MD.C.7"],
+  "6.G.A.2": ["5.MD.C.5"],
+  "8.G.C.9": ["6.G.A.2", "7.G.B.4"],
+  "8.G.B.7": ["8.EE.A.2", "6.G.A.1"],
+  "4.G.A.2": ["4.G.A.1", "3.G.A.1"],
+  "5.G.B.4": ["4.G.A.2"],
+  "5.G.A.2": ["5.G.A.1"],
+  "8.G.A.4": ["8.G.A.1", "7.G.A.1"],
+
+  // Data
+  "3.MD.B.3": ["2.MD.D.10"],
+  "6.SP.B.5": ["6.SP.B.4"],
+  "8.SP.A.2": ["8.SP.A.1", "8.EE.B.5"],
+};
