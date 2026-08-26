@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { currentUserId } from "@/lib/auth";
-import { gradesAvailable, searchStandards, standardsByDomain, standardsStats } from "@/lib/standards";
+import {
+  getStandard,
+  gradesAvailable,
+  hasPublishedLadder,
+  searchStandards,
+  standardLadder,
+  standardsByDomain,
+  standardsStats,
+} from "@/lib/standards";
 
 export const runtime = "nodejs";
 
@@ -13,6 +21,20 @@ export async function GET(req: NextRequest) {
   const q = url.searchParams.get("q");
 
   if (q) return NextResponse.json({ results: searchStandards(q, subject) });
+
+  // Prerequisites for one standard, walked from the published sequence. Useful
+  // in its own right: a parent asking "what does my child need before this?"
+  // gets real codes they can check, not a generated guess.
+  const ladderFor = url.searchParams.get("ladder");
+  if (ladderFor) {
+    const std = getStandard(ladderFor);
+    if (!std) return NextResponse.json({ error: "Unknown standard code" }, { status: 404 });
+    return NextResponse.json({
+      standard: std,
+      published: hasPublishedLadder(std.code),
+      prerequisites: standardLadder(std.code),
+    });
+  }
 
   const grade = url.searchParams.get("grade") ?? "4";
   return NextResponse.json({

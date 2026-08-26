@@ -106,13 +106,27 @@ export default function CurriculumPage() {
 }
 
 function StandardRow({ s, showGrade }: { s: Standard; showGrade?: boolean }) {
+  const [prereqs, setPrereqs] = useState<Standard[] | null>(null);
+  const [open, setOpen] = useState(false);
+
+  async function togglePrereqs() {
+    setOpen((o) => !o);
+    if (prereqs) return;
+    const d = await fetch(`/api/standards?ladder=${encodeURIComponent(s.code)}`).then((r) => r.json()).catch(() => null);
+    setPrereqs(d?.prerequisites ?? []);
+  }
+
   return (
+    <>
     <div className="cur-row">
       <span className="cur-code">{s.code}</span>
       <span className="cur-skill">
         {s.skill}
         {showGrade && <span className="cur-grade-tag">{label(s.grade)}</span>}
       </span>
+      <button className="ghost-btn sm" onClick={togglePrereqs} title="What comes before this?">
+        {open ? "Hide steps" : "Before this"}
+      </button>
       <Link
         className="ghost-btn sm"
         href={`/onboarding?topic=${encodeURIComponent(s.skill)}&code=${encodeURIComponent(s.code)}&grade=${encodeURIComponent(s.grade)}`}
@@ -120,5 +134,26 @@ function StandardRow({ s, showGrade }: { s: Standard; showGrade?: boolean }) {
         Teach me this
       </Link>
     </div>
+    {open && (
+      <div className="cur-prereqs">
+        {prereqs === null ? (
+          <span className="muted">Loading…</span>
+        ) : prereqs.length === 0 ? (
+          <span className="muted">No mapped prerequisites. The tutor will work them out from the learner&apos;s answers.</span>
+        ) : (
+          <>
+            <div className="cur-prereqs-h">Needs first, easiest to hardest</div>
+            {prereqs.map((p) => (
+              <div key={p.code} className="cur-prereq">
+                <span className="cur-code">{p.code}</span>
+                <span>{p.skill}</span>
+                <span className="cur-grade-tag">{label(p.grade)}</span>
+              </div>
+            ))}
+          </>
+        )}
+      </div>
+    )}
+    </>
   );
 }

@@ -15,6 +15,7 @@
 import { callGemini } from "./gemini";
 import { db, newId, now } from "./db";
 import { bandScopePrompt, parseBand } from "./gradeband";
+import { getStandard, hasPublishedLadder, matchStandard, standardLadder } from "./standards";
 import { US_PEDAGOGY } from "./pedagogy";
 import type { AnswerEvidence, Diagnosis, PrereqLadder, PrereqStep } from "./types";
 
@@ -57,7 +58,7 @@ function readLadder(skill: string, subject: string, band: string): PrereqLadder 
   db().prepare(`UPDATE prereq_ladders SET uses = uses + 1 WHERE id = ?`).run(r.id);
   try {
     const steps = JSON.parse(r.steps) as PrereqStep[];
-    return Array.isArray(steps) && steps.length ? { target: skill, steps } : null;
+    return Array.isArray(steps) && steps.length ? { target: skill, steps, source: "generated" } : null;
   } catch {
     return null;
   }
@@ -86,8 +87,27 @@ export async function buildPrereqLadder(input: {
   skill: string;
   topic: string;
   level?: string;
+  /** A CCSS-M code, when the skill came from the curriculum spine. */
+  standardCode?: string;
 }): Promise<PrereqLadder> {
   const band = parseBand(input.level) ?? "any";
+
+  // 1. The PUBLISHED sequence, when we know which standard this is. Strictly
+  //    better than generating: deterministic, identical for every learner, free,
+  //    and every rung is a real code a teacher can look up.
+  const std =
+    (input.standardCode ? getStandard(input.standardCode) : null) ??
+    matchStandard(input.skill, band === "any" ? undefined : band);
+  if (std && hasPublishedLadder(std.code)) {
+    const steps = standardLadder(std.code).map<PrereqStep>((r) => ({
+      skill: r.skill,
+      grade: r.grade === "K" ? "Kindergarten" : `Grade ${r.grade}`,
+      check: `${r.code}: ${r.skill}`,
+    }));
+    if (steps.length) return { target: input.skill, steps, source: "published", standardCode: std.code };
+  }
+
+  // 2. Otherwise fall back to a cached or generated ladder.
   const cached = readLadder(input.skill, input.topic, band);
   if (cached) return cached;
 
@@ -106,9 +126,9 @@ export async function buildPrereqLadder(input: {
         check: typeof s.check === "string" ? stripDashes(s.check.trim()).slice(0, 240) : "",
       }));
     writeLadder(input.skill, input.topic, band, steps);
-    return { target: input.skill, steps };
+    return { target: input.skill, steps, source: "generated" };
   } catch {
-    return { target: input.skill, steps: [] };
+    return { target: input.skill, steps: [], source: "generated" };
   }
 }
 

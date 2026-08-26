@@ -6,7 +6,7 @@
 // parent or teacher recognises, and a sequence we can walk.
 
 import { db } from "./db";
-import { ALIASES } from "./ccssm";
+import { ALIASES, PREREQS } from "./ccssm";
 
 export interface Standard {
   code: string;
@@ -114,4 +114,66 @@ export function standardsStats(): { total: number; grades: number } {
     .prepare(`SELECT COUNT(*) AS total, COUNT(DISTINCT grade) AS grades FROM standards`)
     .get() as { total: number; grades: number };
   return r;
+}
+
+// ---- the published prerequisite ladder --------------------------------------
+
+const GRADE_ORDER = ["K", "1", "2", "3", "4", "5", "6", "7", "8"];
+const gradeRank = (g: string) => {
+  const i = GRADE_ORDER.indexOf(g);
+  return i === -1 ? 99 : i;
+};
+
+/**
+ * Walk the published sequence backwards from a standard to build its
+ * prerequisite ladder, easiest first.
+ *
+ * This is strictly better than generating one: it is deterministic, identical
+ * for every learner, free, and traceable to real standard codes a teacher can
+ * check. Returns an empty list when the standard has no mapped prerequisites,
+ * so the caller can fall back to generating one.
+ */
+export function standardLadder(code: string, maxSteps = 5): Standard[] {
+  const start = getStandard(code);
+  if (!start) return [];
+
+  // Breadth-first backwards through the graph, nearest prerequisites first.
+  const seen = new Set<string>([code]);
+  const found: Standard[] = [];
+  let frontier = PREREQS[code] ?? [];
+  let depth = 0;
+
+  while (frontier.length && found.length < maxSteps * 2 && depth < 6) {
+    const next: string[] = [];
+    for (const c of frontier) {
+      if (seen.has(c)) continue;
+      seen.add(c);
+      const std = getStandard(c);
+      if (std) found.push(std);
+      next.push(...(PREREQS[c] ?? []));
+    }
+    frontier = next;
+    depth++;
+  }
+
+  // Easiest first, which is the order a learner should meet them.
+  return found
+    .sort((a, b) => gradeRank(a.grade) - gradeRank(b.grade) || a.code.localeCompare(b.code))
+    .slice(-maxSteps);
+}
+
+/** True when the spine can supply a ladder without asking a model. */
+export function hasPublishedLadder(code: string): boolean {
+  return (PREREQS[code]?.length ?? 0) > 0;
+}
+
+/** Best matching standard for a free-text skill, if one is clearly indicated. */
+export function matchStandard(skill: string, grade?: string, subject = "math"): Standard | null {
+  const hits = searchStandards(skill, subject, 5);
+  if (!hits.length) return null;
+  if (grade) {
+    const atGrade = hits.find((h) => h.grade === grade);
+    if (atGrade) return atGrade;
+  }
+  return hits[0];
 }
