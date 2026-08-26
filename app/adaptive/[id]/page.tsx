@@ -221,6 +221,7 @@ export default function AdaptiveLoopPage({ params }: { params: Promise<{ id: str
           hintsUsed: meta.hintsUsed,
           seconds: meta.seconds,
           totalSeconds: meta.totalSeconds,
+          working: meta.working,
           retryOf,
         }),
       });

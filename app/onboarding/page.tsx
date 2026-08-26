@@ -115,7 +115,12 @@ export default function OnboardingPage() {
       const res = await fetch(`/api/adaptive/diagnostic/${diagnosticId}/submit`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ answers, seconds: meta.seconds, totalSeconds: meta.totalSeconds }),
+        body: JSON.stringify({
+          answers,
+          seconds: meta.seconds,
+          totalSeconds: meta.totalSeconds,
+          working: meta.working,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error ?? "Grading failed");

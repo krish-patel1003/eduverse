@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type { AssessmentItemType, QuizOption } from "@/lib/types";
 import type { ItemVisual } from "@/lib/visuals";
 import ItemVisualFigure from "@/components/ItemVisual";
+import Whiteboard from "@/components/Whiteboard";
 
 // The client-safe item shape (no answer keys).
 export interface PublicItem {
@@ -28,6 +29,8 @@ export interface SubmitMeta {
   seconds: Record<string, number>;
   /** Active seconds across the whole assessment. */
   totalSeconds: number;
+  /** Handwritten working per item id, as a JPEG data URL. */
+  working: Record<string, string>;
 }
 
 interface Props {
@@ -38,6 +41,9 @@ interface Props {
   title?: string;
   subtitle?: string;
 }
+
+// Item types where handwritten working is part of the answer, not just scratch.
+const SHOW_WORKING = new Set<AssessmentItemType>(["math_multistep", "short_answer", "pseudocode"]);
 
 const TYPE_LABEL: Record<AssessmentItemType, string> = {
   mcq: "Choose one",
@@ -70,6 +76,10 @@ export default function AssessmentRunner({ items, onSubmit, submitting, submitLa
   const activeIdRef = useRef<string | null>(null);
   const lastActivityRef = useRef<number>(Date.now());
   const itemRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  // Handwritten working. Kept in a ref because it changes on every stroke and
+  // must not re-render the whole assessment while a child is drawing.
+  const workingRef = useRef<Record<string, string>>({});
+  const [padOpen, setPadOpen] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     const IDLE_MS = 45_000; // no interaction for this long: stop counting
@@ -115,7 +125,9 @@ export default function AssessmentRunner({ items, onSubmit, submitting, submitLa
       seconds[it.id] = sec;
       total += sec;
     }
-    return { hintsUsed: hintsShown, seconds, totalSeconds: total };
+    const working: Record<string, string> = {};
+    for (const [id, url] of Object.entries(workingRef.current)) if (url) working[id] = url;
+    return { hintsUsed: hintsShown, seconds, totalSeconds: total, working };
   }
 
   const set = (id: string, v: unknown) => setAnswers((a) => ({ ...a, [id]: v }));
@@ -167,6 +179,41 @@ export default function AssessmentRunner({ items, onSubmit, submitting, submitLa
               <div className="ai-prompt">{it.prompt}</div>
 
               {it.visual && <ItemVisualFigure visual={it.visual} />}
+
+              {/* Somewhere to actually work it out. On a multi step problem the
+                  working IS the skill, so for open items the drawing is
+                  submitted and graded alongside the typed answer. */}
+              {(() => {
+                const graded = SHOW_WORKING.has(it.type);
+                const open = padOpen[it.id];
+                return (
+                  <div className="ai-pad">
+                    {!open ? (
+                      <button type="button" className="ai-pad-btn" onClick={() => setPadOpen((p) => ({ ...p, [it.id]: true }))}>
+                        ✏️ {graded ? "Show your working" : "Scratchpad"}
+                      </button>
+                    ) : (
+                      <>
+                        <Whiteboard
+                          label={graded ? "Your working (this gets marked)" : "Scratchpad (just for thinking)"}
+                          ratio={graded ? 0.62 : 0.42}
+                          maxHeight={graded ? 340 : 200}
+                          onChange={(url) => {
+                            if (url) workingRef.current[it.id] = url;
+                            else delete workingRef.current[it.id];
+                          }}
+                        />
+                        {graded && (
+                          <p className="ai-pad-note">
+                            Write your steps here. We mark the method, so showing how you got there counts even if a
+                            number comes out slightly wrong.
+                          </p>
+                        )}
+                      </>
+                    )}
+                  </div>
+                );
+              })()}
 
               {(it.hints?.length ?? 0) > 0 && (
                 <div className="ai-hints">

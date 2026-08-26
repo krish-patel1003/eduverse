@@ -95,7 +95,8 @@ export async function POST(req: NextRequest) {
 
     const hintsUsed = (body?.hintsUsed && typeof body.hintsUsed === "object" ? body.hintsUsed : {}) as Record<string, number>;
     const seconds = (body?.seconds && typeof body.seconds === "object" ? body.seconds : {}) as Record<string, number>;
-    const result = await gradeAssessment({ assessment, answers, hintsUsed, seconds });
+    const working = (body?.working && typeof body.working === "object" ? body.working : {}) as Record<string, string>;
+    const result = await gradeAssessment({ assessment, answers, hintsUsed, seconds, working });
 
     // Record the outcome on the latest round.
     const rounds = [...session.rounds];

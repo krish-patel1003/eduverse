@@ -29,18 +29,33 @@ export const usingGemini = Boolean(apiKey);
 
 export type Part = { text: string } | { inlineData: { mimeType: string; data: string } };
 
-export async function callGemini(system: string, parts: Part[]): Promise<unknown> {
+// A hung upstream call used to block the whole request forever: there was no
+// timeout anywhere, so one stalled generation could pin a route for 20+ minutes.
+const CALL_TIMEOUT_MS = Number(process.env.GEMINI_TIMEOUT_MS ?? 180_000);
+
+export async function callGemini(system: string, parts: Part[], timeoutMs = CALL_TIMEOUT_MS): Promise<unknown> {
   if (!apiKey) throw new Error("GEMINI_API_KEY not set");
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
-    body: JSON.stringify({
-      systemInstruction: { parts: [{ text: system }] },
-      contents: [{ role: "user", parts }],
-      generationConfig: { responseMimeType: "application/json", temperature: 0.7 },
-    }),
-  });
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      signal: ctrl.signal,
+      headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: system }] },
+        contents: [{ role: "user", parts }],
+        generationConfig: { responseMimeType: "application/json", temperature: 0.7 },
+      }),
+    });
+  } catch (err) {
+    if ((err as Error)?.name === "AbortError") throw new Error(`Gemini timed out after ${Math.round(timeoutMs / 1000)}s`);
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
     throw new Error(`Gemini ${res.status}: ${detail.slice(0, 400)}`);
