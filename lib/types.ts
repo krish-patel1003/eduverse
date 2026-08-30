@@ -418,6 +418,8 @@ export interface AssessmentItem {
   hints?: string[];
   /** How long this should reasonably take, in seconds (model estimate). */
   expectedSeconds?: number;
+  /** One or two sentences explaining WHY the correct answer is correct. */
+  explanation?: string;
 }
 
 export interface Assessment {
@@ -496,10 +498,31 @@ export interface AnswerEvidence {
 }
 
 /** The graded outcome of an assessment attempt. */
+/** One reviewable question: what was asked, what they said, what was right. */
+export interface ReviewItem {
+  itemId: string;
+  aspect: string;
+  question: string;
+  /** What the learner submitted, rendered readably. */
+  yourAnswer: string;
+  /** The correct answer, for auto-graded items. */
+  correctAnswer?: string;
+  correct: boolean;
+  score: number;
+  /** Why the correct answer is correct. */
+  explanation?: string;
+  /** Grader feedback on an open answer, when there is any. */
+  feedback?: string;
+  /** Which probe this came from, when the diagnostic was staged. */
+  stage?: number;
+}
+
 export interface AssessmentResult {
   perItem: AssessmentItemGrade[];
   /** Full per-item record (question, answer, verdict, misconception). */
   evidence?: AnswerEvidence[];
+  /** Learner-facing review: every question with the right answer and why. */
+  review?: ReviewItem[];
   /** Raw vs independent vs hint-discounted score, for judging real mastery. */
   mastery?: { raw: number; independent: number; hintsUsed: number; effective: number };
   /** Speed picture. Separate from mastery on purpose: accuracy first, then speed. */

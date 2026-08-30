@@ -1306,3 +1306,27 @@ body {
 .cur-prereq { display: flex; align-items: center; gap: 10px; padding: 4px 0; font-size: 13px; flex-wrap: wrap; }
 .cur-grade.hs { border-style: dashed; }
 .cur-course-note { font-size: 12.5px; margin: -6px 0 12px; line-height: 1.5; }
+
+/* ---- answer review ---- */
+.rv { margin-top: 22px; }
+.rv-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 14px; flex-wrap: wrap; }
+.rv-head h2 { margin: 0 0 3px; font-size: 17px; }
+.rv-head p { margin: 0; font-size: 13.5px; }
+.rv-empty { padding: 14px; border: 1px dashed var(--border); border-radius: 12px; }
+.rv-item { position: relative; padding: 14px 16px; margin-bottom: 10px; border-radius: 14px; border: 1px solid var(--border); background: var(--panel); }
+.rv-item.miss { border-color: rgba(251,191,36,.4); }
+.rv-top { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 10px; }
+.rv-mark { flex: 0 0 auto; width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; }
+.rv-mark.ok { background: rgba(52,211,153,.18); color: #34d399; }
+.rv-mark.miss { background: rgba(251,191,36,.18); color: #fbbf24; }
+.rv-q { flex: 1; min-width: 0; font-size: 14px; line-height: 1.5; white-space: pre-wrap; }
+.rv-aspect { flex: 0 0 auto; font-size: 11px; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 2px 9px; }
+.rv-answers { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+.rv-ans { display: flex; flex-direction: column; gap: 2px; padding: 8px 12px; border-radius: 10px; background: var(--bg); border: 1px solid var(--border); font-size: 13.5px; min-width: 140px; }
+.rv-ans.ok { border-color: rgba(52,211,153,.35); }
+.rv-ans.miss { border-color: rgba(251,191,36,.35); }
+.rv-lbl { font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.rv-why { display: flex; gap: 9px; padding: 10px 12px; border-radius: 10px; background: rgba(110,168,254,.09); border: 1px solid rgba(110,168,254,.28); font-size: 13.5px; line-height: 1.5; }
+.rv-why-ico { line-height: 1.5; }
+.rv-feedback { margin-top: 8px; padding: 9px 12px; border-left: 2px solid var(--border); font-size: 13px; color: var(--muted); line-height: 1.5; }
+.rv-stage { margin-top: 8px; font-size: 11px; color: var(--muted); }

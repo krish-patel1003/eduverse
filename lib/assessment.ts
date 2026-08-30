@@ -20,6 +20,7 @@ import type {
   AssessmentResult,
   ErrorType,
   QuizOption,
+  ReviewItem,
 } from "./types";
 
 const PASS_PCT = 70;
@@ -113,7 +114,8 @@ Output ONLY this JSON:
       "rubric": "what a correct answer must demonstrate",  // ALL open (non-auto-graded) items; hidden from the learner
       "visual": { "kind": "fraction_bar", "parts": 8, "shaded": 3 },  // OPTIONAL, see VISUALS below
       "hints": ["a gentle nudge", "a more concrete step"],  // 1-2 progressive hints, see HINTS below
-      "expectedSeconds": 25  // how long a learner AT THIS GRADE who knows it should need, thinking time only
+      "expectedSeconds": 25,  // how long a learner AT THIS GRADE who knows it should need, thinking time only
+      "explanation": "one short sentence saying WHY the correct answer is correct"
     }
   ]
 }
@@ -128,6 +130,11 @@ EXPECTED TIME: give every item "expectedSeconds", the THINKING time a learner at
 this exact grade band who understands the material would need. Do not include
 time spent reading the question, that is accounted for separately. Be realistic
 for the age: a young child works more slowly than an adult on the same operation.
+
+EXPLANATION: every item needs a short "explanation", one or two sentences, saying
+why the correct answer is correct. Write it for the learner to read AFTER they
+have answered, so it teaches rather than merely asserts. Name the idea or step
+that decides it, do not just restate the answer.
 
 Rules:
 - Every item has an "aspect". Together the items must cover every major aspect (diagnostic) or every aspect of the taught material (thorough).
@@ -173,6 +180,8 @@ function normItem(raw: unknown): AssessmentItem | null {
   }
   const visual = normalizeVisual(r.visual);
   if (visual) item.visual = visual;
+  if (typeof r.explanation === "string" && r.explanation.trim())
+    item.explanation = stripDashes(r.explanation.trim()).slice(0, 400);
   const es = Number(r.expectedSeconds);
   if (Number.isFinite(es) && es >= 3 && es <= 600) item.expectedSeconds = Math.round(es);
   if (Array.isArray(r.hints)) {
@@ -538,6 +547,26 @@ export async function gradeAssessment(input: {
   }
   const fluency = timingById.size ? fluencyFrom([...timingById.values()], overall) : undefined;
 
+  // Learner-facing review. Unlike `evidence` (which is engine input and names
+  // misconceptions), this is written to be READ: what was asked, what they said,
+  // what was right, and why.
+  const review: ReviewItem[] = assessment.items.map((it) => {
+    const g = byId.get(it.id);
+    return {
+      itemId: it.id,
+      aspect: it.aspect,
+      question: it.prompt,
+      yourAnswer: answerText(it, answers[it.id]),
+      correctAnswer: expectedText(it) || undefined,
+      correct: g?.correct ?? false,
+      score: g?.score ?? 0,
+      explanation: it.explanation,
+      // Grader feedback is only worth showing on open items, where it is a real
+      // judgement. On auto-graded items it is just "Correct." / "Incorrect.".
+      feedback: AUTO_TYPES.has(it.type) ? undefined : g?.feedback || undefined,
+    };
+  });
+
   return {
     perItem,
     perAspect,
@@ -545,6 +574,7 @@ export async function gradeAssessment(input: {
     passed,
     weakAspects,
     evidence,
+    review,
     mastery,
     fluency,
     summary: passed

@@ -262,6 +262,10 @@ function migrate(db: Database.Database): void {
   // context differs) but for the cold-start method prior, which is about HOW the
   // learner answers rather than what they answered about.
   addCol("diagnostics", "evidence", "evidence TEXT");
+  // Learner-facing review, accumulated ACROSS placement stages. Each stage
+  // replaces the stored assessment, so without this the review would only ever
+  // show the final probe rather than everything they answered.
+  addCol("diagnostics", "review", "review TEXT");
   // Backfill: every existing account's self-student becomes its own first child.
   db.exec(`UPDATE students SET owner_id = id WHERE owner_id IS NULL AND id IN (SELECT id FROM users)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_students_owner ON students (owner_id)`);

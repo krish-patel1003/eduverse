@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { generateAssessment, rankFor, gradeAssessment } from "@/lib/assessment";
 import {
   getDiagnosticAssessment,
+  appendDiagnosticReview,
+  getDiagnosticReview,
   getPlacement,
   replaceDiagnosticAssessment,
   saveDiagnosticResult,
@@ -61,7 +63,15 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ did: strin
     const working = (body?.working && typeof body.working === "object" ? body.working : {}) as Record<string, string>;
     const result = await gradeAssessment({ assessment, answers, seconds, working });
 
+    // Record this stage's reviewable questions before anything else, so a staged
+    // placement ends up with a review of EVERYTHING answered, not just the last
+    // probe (each stage replaces the stored assessment).
     const placement = getPlacement<PlacementState>(did);
+    const stageNo = (placement?.stages.length ?? 0) + 1;
+    appendDiagnosticReview(
+      did,
+      (result.review ?? []).map((r) => ({ ...r, stage: placement ? stageNo : undefined }))
+    );
     // No placement state means a legacy one-shot diagnostic; finish it as before.
     if (placement && !placement.done) {
       placement.stages.push({
@@ -147,6 +157,8 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ did: strin
       statedLevel: placement ? bandLabel(placement.statedBand) : assessment.level,
       movedLevel: !!placement && placement.workingBand !== placement.statedBand,
       questionsAsked: placement ? placement.stages.length * PROBE_SIZE : assessment.items.length,
+      // Everything they answered, with the right answer and why.
+      review: getDiagnosticReview(did),
     });
   } catch (err) {
     console.error("diagnostic submit error", err);
