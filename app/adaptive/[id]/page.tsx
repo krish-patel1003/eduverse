@@ -6,6 +6,7 @@ import AppNav from "@/components/AppNav";
 import ExplainerPlayer from "@/components/ExplainerPlayer";
 import AssessmentRunner, { type PublicItem, type SubmitMeta } from "@/components/AssessmentRunner";
 import LessonFeedback from "@/components/LessonFeedback";
+import AnswerReview, { type ReviewRow } from "@/components/AnswerReview";
 import ModePicker from "@/components/ModePicker";
 import {
   METHOD_LABEL,
@@ -43,6 +44,8 @@ interface Verdict {
   weakAspects: string[];
   summary: string;
   perItem: { itemId: string; correct: boolean; score: number; feedback: string }[];
+  /** Every question with the right answer and why. */
+  review?: ReviewRow[];
   reward?: { xp: number; reason: string; headline: string; message: string; emoji: string; comeback: boolean };
   progress?: { xp: number; streak: number; streakExtended: boolean };
 }
@@ -434,15 +437,12 @@ export default function AdaptiveLoopPage({ params }: { params: Promise<{ id: str
                   );
                 })}
               </div>
-              {verdict.perItem.some((p) => !p.correct && p.feedback) && (
-                <div className="verdict-feedback">
-                  <h3>What tripped you up</h3>
-                  {verdict.perItem.filter((p) => !p.correct && p.feedback).slice(0, 5).map((p, i) => (
-                    <div key={i} className="vf-item">{p.feedback}</div>
-                  ))}
-                </div>
-              )}
             </details>
+
+            {/* The full review: every question as it was asked, what they chose,
+                what was right, and why. This replaces a list of bare grader
+                strings like "Incorrect." which told the learner nothing. */}
+            <AnswerReview rows={verdict.review ?? []} title="Go over the questions" />
 
             {/* What's next: always give a clear, small, appealing next step. */}
             <div className="whats-next">

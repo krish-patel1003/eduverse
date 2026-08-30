@@ -184,6 +184,8 @@ export async function POST(req: NextRequest) {
       summary: result.summary,
       mastery: result.mastery,
       fluency: result.fluency,
+      // Every question with the right answer and why, same as the diagnostic.
+      review: result.review,
       reward,
       progress,
     });
