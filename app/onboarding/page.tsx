@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import AppNav from "@/components/AppNav";
+import AnswerReview, { type ReviewRow } from "@/components/AnswerReview";
 import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import AssessmentRunner, { type PublicItem, type SubmitMeta } from "@/components/AssessmentRunner";
@@ -25,6 +26,12 @@ interface Report {
   perAspect: { aspect: string; score: number }[];
   weakAspects: string[];
   summary: string;
+  /** Every question answered, with the right answer and why. */
+  review?: ReviewRow[];
+  workingLevel?: string;
+  statedLevel?: string;
+  movedLevel?: boolean;
+  questionsAsked?: number;
 }
 
 function OnboardingInner() {
@@ -246,6 +253,9 @@ function OnboardingInner() {
           <>
             <header className="page-head"><h1>Your initial assessment</h1><p>Here&apos;s where you stand on <b>{topic}</b>.</p></header>
             <ReportView report={report} />
+            {/* Going back over the questions is where the learning is: the score
+                says where they stand, the review says why. */}
+            <AnswerReview rows={(report.review ?? []) as ReviewRow[]} />
             <div className="outline-actions">
               <button className="send big" onClick={() => router.push("/adaptive")}>Go to my tutor ▸</button>
             </div>

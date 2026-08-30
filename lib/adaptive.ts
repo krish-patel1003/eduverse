@@ -10,6 +10,7 @@ import type {
   AssessmentResult,
   Diagnostic,
   Explainer,
+  ReviewItem,
   WeakArea,
 } from "./types";
 
@@ -492,4 +493,44 @@ export function speedBySkill(
       needsSpeedWork: v.flag,
     }))
     .sort((a, b) => b.pace - a.pace);
+}
+
+/** Append this stage's reviewable questions to the diagnostic's running review. */
+export function appendDiagnosticReview(diagnosticId: string, rows: ReviewItem[]): void {
+  if (!rows.length) return;
+  const existing = getDiagnosticReview(diagnosticId);
+  db()
+    .prepare(`UPDATE diagnostics SET review = ? WHERE id = ?`)
+    .run(JSON.stringify([...existing, ...rows]), diagnosticId);
+}
+
+export function getDiagnosticReview(diagnosticId: string): ReviewItem[] {
+  const r = db().prepare(`SELECT review FROM diagnostics WHERE id = ?`).get(diagnosticId) as
+    | { review: string | null }
+    | undefined;
+  return r?.review ? parseJson<ReviewItem[]>(r.review, []) : [];
+}
+
+/** A graded diagnostic with its review, for viewing later. */
+export function getDiagnosticForReview(
+  id: string,
+  studentId: string
+): { id: string; topic: string; overall: number; rank: string; createdAt: number; review: ReviewItem[] } | null {
+  const r = db()
+    .prepare(
+      `SELECT id, topic, overall, rank, created_at FROM diagnostics
+        WHERE id = ? AND student_id = ? AND status = 'graded'`
+    )
+    .get(id, studentId) as
+    | { id: string; topic: string; overall: number | null; rank: string | null; created_at: number }
+    | undefined;
+  if (!r) return null;
+  return {
+    id: r.id,
+    topic: r.topic,
+    overall: r.overall ?? 0,
+    rank: r.rank ?? "",
+    createdAt: r.created_at,
+    review: getDiagnosticReview(id),
+  };
 }
