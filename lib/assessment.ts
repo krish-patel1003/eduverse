@@ -20,7 +20,9 @@ import type {
   AssessmentResult,
   ErrorType,
   QuizOption,
+  ReviewBlank,
   ReviewItem,
+  ReviewOption,
 } from "./types";
 
 const PASS_PCT = 70;
@@ -552,11 +554,45 @@ export async function gradeAssessment(input: {
   // what was right, and why.
   const review: ReviewItem[] = assessment.items.map((it) => {
     const g = byId.get(it.id);
+    const raw = answers[it.id];
+
+    // Rebuild the question the way it was ASKED, so review is recognisable
+    // rather than a pair of rendered strings.
+    let options: ReviewOption[] | undefined;
+    if (it.type === "mcq" || it.type === "multi_mcq") {
+      const picked = new Set(Array.isArray(raw) ? (raw as unknown[]).map(String) : raw ? [String(raw)] : []);
+      const key = new Set(it.correct ?? []);
+      options = (it.options ?? []).map((o) => ({
+        id: o.id,
+        text: o.text,
+        isCorrect: key.has(o.id),
+        chosen: picked.has(o.id),
+        reason: o.reason,
+      }));
+    }
+
+    let blanks: ReviewBlank[] | undefined;
+    if (it.type === "fill_blank") {
+      const given = Array.isArray(raw) ? (raw as unknown[]).map((x) => String(x ?? "")) : [];
+      blanks = (it.correct ?? []).map((exp, i) => ({
+        index: i,
+        yours: (given[i] ?? "").trim(),
+        expected: exp,
+        correct: norm(given[i] ?? "") === norm(exp),
+      }));
+    }
+
     return {
       itemId: it.id,
       aspect: it.aspect,
       question: it.prompt,
-      yourAnswer: answerText(it, answers[it.id]),
+      type: it.type,
+      options,
+      blanks,
+      starterCode: it.starterCode,
+      language: it.language,
+      visual: it.visual,
+      yourAnswer: answerText(it, raw),
       correctAnswer: expectedText(it) || undefined,
       correct: g?.correct ?? false,
       score: g?.score ?? 0,

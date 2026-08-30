@@ -498,11 +498,40 @@ export interface AnswerEvidence {
 }
 
 /** The graded outcome of an assessment attempt. */
+/** One option as the learner sees it in review: was it right, did they pick it? */
+export interface ReviewOption {
+  id: string;
+  text: string;
+  isCorrect: boolean;
+  chosen: boolean;
+  /** One line on why this option is right or wrong, when the author gave one. */
+  reason?: string;
+}
+
+/** One blank in a fill-in-the-blank item. */
+export interface ReviewBlank {
+  index: number;
+  yours: string;
+  expected: string;
+  correct: boolean;
+}
+
 /** One reviewable question: what was asked, what they said, what was right. */
 export interface ReviewItem {
   itemId: string;
   aspect: string;
   question: string;
+  /** How the question asked for a response, so review can render it faithfully. */
+  type: AssessmentItemType;
+  /** Every option with its verdict, for mcq and multi_mcq. */
+  options?: ReviewOption[];
+  /** Per-blank comparison, for fill_blank. */
+  blanks?: ReviewBlank[];
+  /** Code shown with the question, for code items. */
+  starterCode?: string;
+  language?: string;
+  /** The figure shown with the question, so review looks like the question did. */
+  visual?: ItemVisual;
   /** What the learner submitted, rendered readably. */
   yourAnswer: string;
   /** The correct answer, for auto-graded items. */
