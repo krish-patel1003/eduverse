@@ -1383,3 +1383,26 @@ body {
 .sk-row { display: flex; align-items: center; gap: 12px; padding: 6px 0; font-size: 13.5px; }
 .sk-name { flex: 1; min-width: 0; }
 .sk-row .ghost-btn { flex: 0 0 auto; text-decoration: none; }
+
+/* ---- guided path ---- */
+.dom-head { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 10px; flex-wrap: wrap; }
+.dom-head h2 { margin: 0; }
+.pth-bar { height: 8px; border-radius: 999px; background: var(--panel); border: 1px solid var(--border); overflow: hidden; margin-bottom: 20px; }
+.pth-bar > span { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), #8b7cf6); transition: width .3s; }
+.pth-steps { display: flex; flex-direction: column; }
+.pth-step { display: flex; gap: 14px; }
+.pth-rail { display: flex; flex-direction: column; align-items: center; flex: 0 0 auto; width: 34px; }
+.pth-dot { width: 30px; height: 30px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 700; border: 1px solid var(--border); background: var(--panel); color: var(--muted); flex: 0 0 auto; }
+.pth-step.available .pth-dot { border-color: var(--accent); color: var(--accent); background: rgba(110,168,254,.14); }
+.pth-step.done .pth-dot { border-color: rgba(52,211,153,.5); color: #34d399; background: rgba(52,211,153,.14); }
+.pth-line { flex: 1; width: 2px; background: var(--border); margin: 4px 0; min-height: 22px; }
+.pth-step.done .pth-line { background: rgba(52,211,153,.4); }
+.pth-body { flex: 1; min-width: 0; padding-bottom: 20px; }
+.pth-top { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.pth-code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; color: var(--accent); }
+.pth-title { font-size: 14.5px; }
+.pth-step.locked .pth-title { color: var(--muted); }
+.pth-mastery { display: flex; align-items: center; gap: 10px; margin-top: 8px; max-width: 320px; font-size: 12px; }
+.pth-action { margin-top: 10px; }
+.pth-locked { font-size: 12.5px; }
