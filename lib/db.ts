@@ -208,6 +208,24 @@ function migrate(db: Database.Database): void {
       skill   TEXT NOT NULL
     );
 
+    -- Sub-skills beneath each standard. A standard is the right SPINE but too
+    -- coarse to teach from: "4.NBT.B.5 multiply up to four digits" is really a
+    -- dozen teachable skills. These are generated ONCE per standard and then
+    -- read, never regenerated, which is what makes the skill list identical on
+    -- every visit instead of drifting between runs.
+    CREATE TABLE IF NOT EXISTS substandards (
+      id            TEXT PRIMARY KEY,
+      standard_code TEXT NOT NULL,
+      subject       TEXT NOT NULL DEFAULT 'math',
+      grade         TEXT NOT NULL,
+      name          TEXT NOT NULL,
+      idx           INTEGER NOT NULL DEFAULT 0,
+      created_at    INTEGER NOT NULL,
+      UNIQUE (standard_code, name)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_sub_standard ON substandards (standard_code, idx);
+    CREATE INDEX IF NOT EXISTS idx_sub_grade ON substandards (subject, grade);
     CREATE INDEX IF NOT EXISTS idx_standards_grade ON standards (subject, grade);
     CREATE INDEX IF NOT EXISTS idx_teachout_skill ON teaching_outcomes (student_id, skill);
     CREATE INDEX IF NOT EXISTS idx_concepts_student ON concepts (student_id);

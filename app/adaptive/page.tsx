@@ -175,8 +175,28 @@ export default function AdaptiveDashboard() {
           </section>
         )}
 
-        <div className="adaptive-actions">
-          <button className="send big" onClick={() => router.push("/onboarding")}>+ Diagnose a new topic</button>
+        {/* Two ways in. Browsing is listed first because a learner often does not
+            know what they do not know, and asking them to name a topic assumes
+            they already do. The grade on their profile supplies the list. */}
+        <div className="two-ways">
+          <Link className="way" href="/adaptive/browse">
+            <span className="way-ico">📚</span>
+            <span className="way-text">
+              <b>Show me what to learn</b>
+              <small>
+                Skills for {data.profile.educationLevel ?? "your grade"}, straight from the curriculum
+              </small>
+            </span>
+            <span className="way-go">▸</span>
+          </Link>
+          <Link className="way" href="/onboarding">
+            <span className="way-ico">✏️</span>
+            <span className="way-text">
+              <b>I know what I want to work on</b>
+              <small>Name a topic and we will find your level in it</small>
+            </span>
+            <span className="way-go">▸</span>
+          </Link>
         </div>
 
         {data.weakAreas.length === 0 ? (

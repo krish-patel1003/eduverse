@@ -1358,3 +1358,28 @@ body {
 .rv-foot .rv-aspect, .rv-foot .rv-stage { font-size: 11px; color: var(--muted); }
 .rv-foot .rv-aspect { border: 1px solid var(--border); border-radius: 999px; padding: 2px 9px; }
 .rv-item .item-visual { margin: 0 0 10px; }
+
+/* ---- two ways to learn ---- */
+.two-ways { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; margin: 18px 0 22px; }
+.way { display: flex; align-items: center; gap: 14px; padding: 16px 18px; border-radius: 16px; text-decoration: none;
+  border: 1px solid var(--border); background: var(--panel); color: var(--text); transition: border-color .12s, transform .06s; }
+.way:hover { border-color: var(--accent); }
+.way:active { transform: scale(.995); }
+.way:first-child { border-color: var(--accent); background: linear-gradient(120deg, rgba(110,168,254,.14), rgba(139,124,246,.06)); }
+.way-ico { font-size: 26px; line-height: 1; flex: 0 0 auto; }
+.way-text { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
+.way-text b { font-size: 15px; }
+.way-text small { color: var(--muted); font-size: 12.5px; line-height: 1.45; }
+.way-go { color: var(--muted); flex: 0 0 auto; }
+
+/* ---- skill browser ---- */
+.sk-build { display: flex; align-items: center; gap: 16px; padding: 16px 18px; margin-bottom: 18px; border-radius: 14px;
+  border: 1px solid rgba(251,191,36,.4); background: rgba(251,191,36,.08); flex-wrap: wrap; }
+.sk-build > div { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 220px; }
+.sk-build small, .sk-build .muted { font-size: 13px; line-height: 1.5; }
+.sk-build .send { flex: 0 0 auto; }
+.sk-count { font-size: 13px; margin: -4px 0 14px; }
+.sk-list { margin: 0 0 10px 0; padding: 8px 0 8px 14px; border-left: 2px solid var(--accent); }
+.sk-row { display: flex; align-items: center; gap: 12px; padding: 6px 0; font-size: 13.5px; }
+.sk-name { flex: 1; min-width: 0; }
+.sk-row .ghost-btn { flex: 0 0 auto; text-decoration: none; }
