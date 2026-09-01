@@ -4,6 +4,7 @@ import { currentUserId, currentStudentId } from "@/lib/auth";
 import { recordEvent, upsertConcept } from "@/lib/profile";
 import { recordTeachingOutcome } from "@/lib/effectiveness";
 import { awardXp, rewardFor } from "@/lib/rewards";
+import { advancePathFor } from "@/lib/paths";
 import {
   getWeakArea,
   getAdaptiveSession,
@@ -128,6 +129,9 @@ export async function POST(req: NextRequest) {
     setWeakAreaMastery(session.weakAreaId, mastery);
     // Schedule the next review so mastery does not silently decay.
     scheduleReview(session.weakAreaId, result.passed);
+    // If this skill sits on a guided path, mastering it completes that step and
+    // unlocks the next one.
+    advancePathFor(session.weakAreaId, result.passed);
     upsertConcept(`${session.topic}: ${session.aspect}`, result.passed ? 0.3 : result.overall / 100 - 0.4, studentId);
 
     // Teaching Effectiveness Profile: record how THIS approach performed on THIS

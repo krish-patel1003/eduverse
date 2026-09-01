@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import AppNav from "@/components/AppNav";
 
@@ -25,6 +26,27 @@ export default function BrowseSkillsPage() {
   const [grade, setGrade] = useState<string | null>(null);
   const [building, setBuilding] = useState(false);
   const [openStd, setOpenStd] = useState<string | null>(null);
+  const [starting, setStarting] = useState<string | null>(null);
+  const router = useRouter();
+
+  // Learning a whole topic skips the diagnostic: the curriculum already says
+  // what the skills are and what order they go in, so there is nothing to find.
+  async function learnTopic(domain: string) {
+    if (!grade) return;
+    setStarting(domain);
+    try {
+      const res = await fetch("/api/paths", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ grade, domain }),
+      });
+      const d = await res.json();
+      if (d?.path?.id) router.push(`/adaptive/path/${d.path.id}`);
+      else setStarting(null);
+    } catch {
+      setStarting(null);
+    }
+  }
 
   const load = useCallback((g?: string) => {
     const q = g ? `?grade=${encodeURIComponent(g)}` : "";
@@ -102,7 +124,17 @@ export default function BrowseSkillsPage() {
 
         {data.domains.map((d) => (
           <section key={d.domain} className="cur-domain">
-            <h2>{d.domain}</h2>
+            <div className="dom-head">
+              <h2>{d.domain}</h2>
+              <button
+                className="send"
+                onClick={() => learnTopic(d.domain)}
+                disabled={starting === d.domain}
+                title="Work through this whole topic in order, no diagnostic"
+              >
+                {starting === d.domain ? "Starting…" : "Learn this topic ▸"}
+              </button>
+            </div>
             {d.clusters.map((c) => (
               <div key={c.cluster} className="cur-cluster">
                 <div className="cur-cluster-name">{c.cluster}</div>

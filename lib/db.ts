@@ -224,6 +224,33 @@ function migrate(db: Database.Database): void {
       UNIQUE (standard_code, name)
     );
 
+    -- Guided learning paths. Picking a whole domain ("Measurement and Data")
+    -- skips the diagnostic entirely: the curriculum already says what to learn
+    -- and in what order, so there is nothing to discover. Steps unlock in
+    -- sequence, because a curriculum is a sequence.
+    CREATE TABLE IF NOT EXISTS paths (
+      id         TEXT PRIMARY KEY,
+      student_id TEXT NOT NULL,
+      subject    TEXT NOT NULL DEFAULT 'math',
+      grade      TEXT NOT NULL,
+      domain     TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      UNIQUE (student_id, subject, grade, domain)
+    );
+
+    CREATE TABLE IF NOT EXISTS path_steps (
+      id            TEXT PRIMARY KEY,
+      path_id       TEXT NOT NULL,
+      idx           INTEGER NOT NULL,
+      standard_code TEXT NOT NULL,
+      title         TEXT NOT NULL,
+      weak_area_id  TEXT,
+      status        TEXT NOT NULL DEFAULT 'locked',
+      completed_at  INTEGER
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_paths_student ON paths (student_id);
+    CREATE INDEX IF NOT EXISTS idx_path_steps ON path_steps (path_id, idx);
     CREATE INDEX IF NOT EXISTS idx_sub_standard ON substandards (standard_code, idx);
     CREATE INDEX IF NOT EXISTS idx_sub_grade ON substandards (subject, grade);
     CREATE INDEX IF NOT EXISTS idx_standards_grade ON standards (subject, grade);
