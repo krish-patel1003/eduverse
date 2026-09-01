@@ -1,161 +1,212 @@
-# EduVerse — Learning Platform
+# EduVerse
 
-Turn any question (± attachments) into a **hand-drawn, voice-narrated explainer**,
-or build a **full adaptive course** for yourself that unlocks module by module and
-learns how you learn.
+**An AI tutor for K-12 that adapts the *teaching*, not just the questions.**
 
-## Two ways in
+When a learner gets something wrong, EduVerse works out *why*, finds the missing
+building block, and re-teaches **that** — a different way — as a narrated,
+hand-drawn explainer video.
 
-- **Build a course** (`/course/new`) — pick a topic + goals (attach docs if you
-  like). We **research the topic on the web** (see below), draft an **outline**
-  you approve, then generate each module as a narrated explainer **one at a
-  time**; finishing a module unlocks the next. Module videos are **interactive**:
-  gated checkpoint questions appear mid-video. Below the player is a tabbed panel
-  — **Ask AI** (doubts + "explain differently"), **Quiz** (a sequential quiz that
-  swaps in for the player, then scores you with a per-concept breakdown and a full
-  review that gives a reason for every option), **Assignment** (take-home tasks),
-  and **Notes** (timestamped, click to seek). Later modules **adapt** to your
-  pace, analogy preference, weak concepts, and style.
+> A Grade 3 learner who fails `78 + 89` is not shown carry-forward again with a
+> new analogy. They are taught **place value**, with pennies and base-ten blocks,
+> because the diagnosis says that is what is actually missing.
 
-### Course research (web-grounded, varied examples)
-
-At outline time, `lib/research.ts` runs a small **search → scrape → synthesize**
-pass: it queries a self-hosted **SearXNG** instance (`SEARXNG_URL`), scrapes the
-top results with a dependency-free Node extractor, and asks the model to distill
-a **research brief** (key concepts, real-world scenarios, diverse analogy
-domains, misconceptions, sources). The brief is cached on the course and fed into
-every module so content is grounded and **analogies stay varied** (no more
-"everything is football"). If `SEARXNG_URL` is unset the brief falls back to
-model-only — still diversified, never blocks.
-- **Quick explainer** (`/chat`) — the original one-off mode: prompt in, narrated
-  video out.
-- **Profile** (`/profile`) — known/weak concepts, practice history, mistakes,
-  progress, motivation, goals, and detected learning style.
-
-### Persistence
-
-Courses, module unlock progress, and the student profile live in **server-side
-SQLite** (`better-sqlite3`) at `data/eduverse.db` (gitignored). Quick-chat history
-stays in-memory as before. Key files: `lib/db.ts` (connection + migrations),
-`lib/store.ts` (course/module CRUD), `lib/profile.ts` (student model + the
-`learnerHint` that makes generation adaptive), `lib/course.ts` (outline / module /
-quiz / assignment / doubt generation), and the `app/api/course/*` +
-`app/api/profile` routes.
+**Live:** https://eduverse-741258687011.us-central1.run.app
 
 ---
 
-## Explainer engine (unchanged core)
+## Why it exists
 
-Turn any question (± attachments) into a **hand-drawn, voice-narrated explainer**
-that plays in a video-player UI with timestamped notes and re-explain.
+Most adaptive tools adapt the *questions*: get it wrong, get an easier one. That
+leaves the learner stuck in the same misunderstanding. EduVerse adapts the
+**instruction**:
 
-## What it does
+| The learner… | The tutor responds with |
+|---|---|
+| Has a weak basic skill | Kumon-style small steps and focused repetition |
+| Doesn't understand the concept | Singapore concrete → pictorial → abstract |
+| Can compute but not reason | Russian-style non-routine problems |
+| Knows the answer but can't explain it | Japanese explain-and-compare |
+| Keeps making the same mistake | Root-cause diagnosis, then the missing prerequisite |
+| Learned it but is forgetting | Spaced review before it fades |
 
-1. **Chat** — type a prompt, optionally attach files (PDF / DOCX / XLSX / CSV /
-   images), pick a **style** (Linear default, or Interactive), and hit Generate.
-2. **Gemini** turns it into a *scene script*: a title + scenes, each with
-   narration and hand-drawn elements (labels, arrows, boxes, circles, freehand).
-3. The **player** renders it as a whiteboard "video": line art that **draws
-   itself on** with a sketchy stroke, handwriting labels, and **voice narration**
-   in sync — with play/pause, seek, speed, and a scene timeline.
-4. **Notes** — jot a note any time; it's stamped with the current timestamp.
-   Click a note to jump back to that moment.
-5. **Re-explain a part you didn't get** — mark an `[ In` / `Out ]` range on the
-   timeline and hit *Re-explain this part*; Gemini generates a slower, simpler
-   mini-explainer focused on just that section.
-6. **Keep chatting** — follow-up prompts make new explainers; each is a card in
-   the chat you can click to replay.
+The last two are where this differs most from a traditional program.
 
-## Illustration engine (generated images)
+---
 
-Scenes are now drawn with **AI-generated illustrations**, not fixed icons:
+## The learning loop
 
-- **Plan** (`lib/gemini.ts`) — `gemini-3.6-flash` writes each scene as a set of
-  **objects** (subject prompts + placement box + entrance animation), **connectors**
-  (curved colored arrows between objects), and **labels**, and picks an `artStyle`
-  (`flat` for technical topics, `marker` for narrative/concept topics).
-- **Generate images** (`lib/imagegen.ts`) — each object becomes a real illustration
-  from `gemini-3.1-flash-image`, on a plain white background. The first image seeds a
-  **style anchor** passed as a reference to the rest, keeping the look consistent across
-  scenes. Images are written to `public/generated/` (cached by prompt hash).
-- **Composite + animate** (`components/ExplainerPlayer.tsx`) — object images are placed
-  on a **white stage with `mix-blend-mode: multiply`**, so the white backgrounds vanish
-  seamlessly (no alpha needed). Each object animates in with its own entrance
-  (fade/pop/grow/slide/draw), connectors draw on as **curved colored arrows**, labels
-  fade in, and the whole scene gets a subtle Ken Burns drift.
-- Falls back to the legacy vector/icon engine (`lib/icons.ts`) for any scene without
-  generated objects.
+```
+Place  →  Teach  →  Check  →  Diagnose why  →  Re-teach differently
+                                                      ↓
+                        Review before forgetting  ←  Master
+```
 
-Tradeoff: generation now takes **~60–90s** (image-heavy), shown behind a "Drawing your
-explainer…" render bar. Toggle off with `ENABLE_IMAGES=false` to use the fast vector
-engine. Configure the model via `GEMINI_IMAGE_MODEL` (default `gemini-3.1-flash-image`;
-`gemini-3-pro-image` for higher quality).
+1. **Adaptive placement** — short probes move up or down a grade band until they
+   find where the learner is *actually* working. Typically 10–15 questions, not a
+   fixed 20-question test.
+2. **Teach** — a lesson is generated for one skill, delivered in a chosen *mode*
+   using an instructional *method* selected by the engine.
+3. **Check** — a typed assessment with figures, progressive hints, and a
+   whiteboard for showing working.
+4. **Diagnose** — every wrong answer gets a named misconception and an error
+   *type*; non-attempts are excluded so random clicks never pollute the diagnosis.
+5. **Re-teach** — the engine drops to the lowest broken prerequisite and changes
+   the teaching method. It never repeats an approach that already failed.
+6. **Remember** — mastery decays; SM-2 scheduling brings skills back for review.
 
-## How narration + sync works
+---
 
-There's no drop-in that renders a bespoke hand-drawn `.mp4` with AI voice in
-seconds. So the explainer is a **synchronized animated player**, not a movie
-file:
+## What a child sees vs what the engine does
 
-- **Art** — an AI scene script → SVG line art animated with a stroke draw-on
-  effect and a hand-sketch filter. The model composes scenes from a named
-  **icon library** (`lib/icons.ts` — person, flask, sun, chip, database, brain,
-  …) plus arrows, labels, and freehand paths, so the drawings are recognizable.
-- **Voice** — **server-side Gemini TTS** synthesizes narration per scene
-  (`lib/tts.ts`, PCM→WAV), giving each scene an exact audio duration. When TTS is
-  unavailable it falls back to the browser's Web Speech voice.
-- **Sync** — when a scene has TTS audio, the `<audio>` element is the master
-  clock (its `timeupdate`/`ended` events drive scene timing; rAF only smooths the
-  drawing between samples), so the animation stays locked to narration.
+A child is never asked to choose between "Kumon" and "Singapore" — that puts the
+instructional-design decision on the learner. They see six plain options:
 
-It behaves like a video (play/pause/seek/speed/notes/timestamps); it just isn't
-downloadable. A true `.mp4` export is a later add-on.
+**✨ Teach Me the Best Way** (the default) · 👀 Show Me · 🪜 Step-by-Step ·
+💡 Explain Why · 🎯 Let Me Practice · 🚀 Challenge Me
 
-## Run
+Behind them the engine selects from **eight instructional methods** — Kumon,
+Singapore, Japanese lesson study, Russian-style, Montessori, Socratic/Polya,
+mastery learning, and worked-example fading — based on the diagnosis and on what
+has demonstrably worked for **this child on this skill**.
+
+That last point matters: effectiveness is tracked **per skill, not per learner**.
+The same child may learn fractions best visually and multiplication best by
+repetition. There is no single "learning style".
+
+---
+
+## Features
+
+**Teaching engine**
+- Root-cause diagnosis naming the misconception behind each wrong answer
+- 7-type error taxonomy mapping mistakes to instructional methods
+- Prerequisite laddering that drops below grade level when the evidence demands it
+- Per-skill teaching-effectiveness profile
+- Cold-start method priors inferred from how a learner answers
+
+**Curriculum**
+- 267 Common Core math standards, **Kindergarten through Grade 12**
+- 178 mapped prerequisite chains (262 edges), traversed rather than generated
+- Searchable by everyday phrase ("long division", "quadratic formula")
+
+**Assessment**
+- Typed items: MCQ, multi-select, fill-in-the-blank, short answer, multi-step
+  working, essay, and code
+- Exact drawn figures (fraction bars, number lines, base-ten blocks, bar models…)
+- Progressive hints, recorded and discounted from mastery
+- Whiteboard for handwritten working, graded on **method** not just the answer
+- Silent response timing with rapid-guess detection
+- Full answer review: every question as it was asked, with the right answer and why
+
+**Learner experience**
+- Child profiles under one parent account
+- XP, streaks, and a time-boxed daily plan
+- Encouragement that never punishes a mistake
+- Hand-drawn, voice-narrated explainer videos
+
+**Grown-up view**
+- Per-skill effectiveness with the instructional methods named
+- Curriculum browser with prerequisites
+- High-fidelity lesson toggle
+
+---
+
+## Quickstart
 
 ```bash
 npm install
-npm run dev            # http://localhost:3000
+cp .env.local.example .env.local   # add your GEMINI_API_KEY
+npm run dev                        # http://localhost:3000
 ```
 
-Set the LLM key in `.env.local` (copy `.env.local.example`):
+Without an API key the app still runs and the loop is walkable, but generation
+and grading are mocked.
 
-```
-GEMINI_API_KEY=your_key
-GEMINI_MODEL=gemini-3.6-flash   # optional
-```
+### Scripts
 
-## Layout
-
-| Path | Role |
+| Command | Does |
 |---|---|
-| `lib/types.ts` | `Explainer` / `Scene` / drawable `Element` shapes. |
-| `lib/gemini.ts` | Prompt → scene script (`generateExplainer`) + `reExplainRange`; validates & clamps every element to the canvas. |
-| `lib/extract.ts` | Attachment text extraction (pdf via unpdf, docx via mammoth, xlsx/csv via SheetJS); images → Gemini vision parts. |
-| `app/api/generate/route.ts` | Multipart: prompt + style + files → explainer. |
-| `app/api/reexplain/route.ts` | Timestamp-range → simpler focused explainer. |
-| `components/ExplainerPlayer.tsx` | The hand-drawn synced player + controls + notes hooks + range-marking. |
-| `app/page.tsx` | Chat sidebar, center stage, notes panel, state. |
+| `npm run dev` | Dev server on :3000 |
+| `npm run build` | Production build (standalone output) |
+| `npm start` | Serve the production build |
+| `npm run lint` | ESLint |
 
-## Config
+---
+
+## Configuration
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `GEMINI_API_KEY` | — | **Required** for real generation and grading |
+| `GEMINI_MODEL` | `gemini-3.6-flash` | Text/JSON model |
+| `GEMINI_TIMEOUT_MS` | `180000` | Hard cap on any single model call |
+| `GEMINI_IMAGE_MODEL` | `gemini-3.1-flash-image` | Scene illustrations |
+| `GEMINI_HIFI_IMAGE_MODEL` | `gemini-3-pro-image` | High-fidelity drawn keyframes |
+| `GEMINI_TTS_MODEL` | `gemini-2.5-flash-preview-tts` | Narration voice |
+| `GEMINI_TTS_VOICE` | `Kore` | Prebuilt voice name |
+| `ENABLE_TTS` | `true` | `false` falls back to Web Speech |
+| `ENABLE_IMAGES` | `true` | `false` uses the fast vector engine |
+| `ENABLE_HIFI` | `true` | `false` disables drawn keyframes entirely |
+| `HIFI_MAX_SCENES` / `HIFI_CONCURRENCY` | `5` / `2` | Cost and latency caps |
+| `DATA_DIR` | `./data` | SQLite location (set to `/tmp` on Cloud Run) |
+| `INLINE_ASSETS` | — | Inline generated media as data URLs (needed on read-only FS) |
+| `SEARXNG_URL` | — | Optional self-hosted search for course research |
+
+---
+
+## Architecture at a glance
 
 ```
-GEMINI_API_KEY=your_key
-GEMINI_MODEL=gemini-3.6-flash                 # scene-script model
-GEMINI_TTS_MODEL=gemini-2.5-flash-preview-tts # narration voice
-GEMINI_TTS_VOICE=Kore                         # prebuilt voice name
-ENABLE_TTS=true                               # set false to skip TTS (uses Web Speech)
+Next.js 15 (App Router)  ·  React 19  ·  TypeScript
+        │
+        ├─ lib/pedagogy.ts      mode → method routing (the teaching engine)
+        ├─ lib/diagnose.ts      root-cause diagnosis + prerequisite ladders
+        ├─ lib/placement.ts     staged adaptive placement
+        ├─ lib/assessment.ts    generation, grading, review
+        ├─ lib/standards.ts     CCSS-M spine + graph traversal
+        ├─ lib/effectiveness.ts per-skill teaching outcomes
+        └─ lib/gemini.ts        LLM calls (JSON contracts, timeouts)
+        │
+   SQLite (better-sqlite3) — 15 tables, additive migrations
+        │
+   GCP Cloud Run + Litestream → Cloud Storage (durable SQLite)
 ```
 
-## Known limits / next steps
+Full detail: **[docs/DESIGN.md](docs/DESIGN.md)**
+UI/UX spec: **[docs/DESIGN-BRIEF.md](docs/DESIGN-BRIEF.md)**
 
-- **Voice** uses server-side Gemini TTS; if the key/model lacks TTS access it
-  degrades to the browser's Web Speech voice, then to captions-only.
-- **Drawing** uses a named icon library + freehand fallback; expanding the icon
-  set (`lib/icons.ts`) directly improves coverage.
-- **Persistence** is in-memory (refresh clears chat/notes). Add storage when you
-  want sessions to survive.
-- **`.mp4` export** — the player is a live synchronized animation; a real video
-  file would need offline render (e.g. Remotion + the TTS audio).
-- **Next.js advisory** — this environment's `npm audit` flags advisories against
-  every Next version it knows; fine for localhost, revisit before deploy.
+---
+
+## Deployment
+
+Containerised standalone Next.js build on **GCP Cloud Run**, with SQLite
+replicated to Cloud Storage by **Litestream** so data survives container
+restarts. Secrets come from **Secret Manager**.
+
+```bash
+gcloud run deploy eduverse --source . --region us-central1
+```
+
+---
+
+## Known limits
+
+- **Math only.** The curriculum spine covers CCSS-M. ELA and NGSS would each need
+  their own seed; the schema already carries a `subject` column.
+- **67% prerequisite coverage.** The remaining standards fall back to
+  model-generated ladders, which is the designed fallback, not a failure.
+- **Lesson generation takes 60–90 seconds** (image-heavy); high-fidelity mode
+  takes several minutes and is opt-in.
+- **Auth is app-local** (scrypt + server sessions) and has not been hardened for
+  untrusted traffic.
+- **No `.mp4` export.** The player is a live synchronized animation, not a file.
+- **Figure attachment is model-dependent** — between 0 and 6 per assessment, with
+  no guaranteed floor.
+
+---
+
+## Licence / attribution
+
+Curriculum skills follow the **Common Core State Standards for Mathematics**.
+© 2010 National Governors Association Center for Best Practices and Council of
+Chief State School Officers.
